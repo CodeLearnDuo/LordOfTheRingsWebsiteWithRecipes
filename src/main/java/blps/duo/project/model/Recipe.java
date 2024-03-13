@@ -2,9 +2,8 @@ package blps.duo.project.model;
 
 import lombok.Data;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
-
-import java.util.List;
 
 @Data
 @Table("recipe")
@@ -14,9 +13,9 @@ public class Recipe {
     private Long id;
     private String title;
     private String description;
-    @Lob
     private byte[] logo;
-    private Race race;
+    @Column("race_id")
+    private Long raceId;
     private double rank;
 
 }
