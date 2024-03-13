@@ -1,21 +1,21 @@
 package blps.duo.project.model;
 
-import jakarta.persistence.*;
 import lombok.Data;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 @Data
-@Entity
+@Table("person")
 public class Person {
-
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
-    private long id;
+    private Long id;
     private String email;
     private String username;
     private String password;
-    @ManyToOne
-    private Race race;
-    @Column(columnDefinition = "false")
+    @Column("person_race_id")
+    private Long personRaceId;
+    @Column("a_leader")
     private boolean aLeader;
 
 }

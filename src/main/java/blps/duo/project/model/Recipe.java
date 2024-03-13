@@ -1,24 +1,21 @@
 package blps.duo.project.model;
 
-import jakarta.persistence.*;
 import lombok.Data;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Table;
 
 import java.util.List;
 
 @Data
-@Entity
+@Table("recipe")
 public class Recipe {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
-    private long id;
+    private Long id;
     private String title;
-    @ManyToMany
-    private List<Ingredient> ingredients;
     private String description;
     @Lob
     private byte[] logo;
-    @ManyToOne
     private Race race;
     private double rank;
 
