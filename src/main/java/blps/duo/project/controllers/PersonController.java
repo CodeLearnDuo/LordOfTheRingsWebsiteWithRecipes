@@ -4,7 +4,7 @@ import blps.duo.project.dto.ApiToken;
 import blps.duo.project.dto.DeletePersonRequest;
 import blps.duo.project.dto.PersonResponse;
 import blps.duo.project.dto.SingUpRequest;
-import blps.duo.project.service.PersonService;
+import blps.duo.project.services.PersonService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -24,12 +24,12 @@ public class PersonController {
     @GetMapping
     @ResponseStatus(HttpStatus.OK)
     public Mono<PersonResponse> getPerson(@RequestHeader ApiToken apiToken) {
-        return personService.findPersonById(apiToken)
-                .defaultIfEmpty();
+        //TODO validation
+        return personService.getPersonById(apiToken);
     }
 
     @GetMapping("/all")
-    public Flux<PersonResponse> listStudents(String name) {
+    public Flux<PersonResponse> getAllPersons(String name) {
 //        return personService.findStudentsByName(name);
         return null;
     }
