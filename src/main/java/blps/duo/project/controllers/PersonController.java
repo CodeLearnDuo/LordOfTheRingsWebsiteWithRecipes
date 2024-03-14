@@ -1,5 +1,6 @@
 package blps.duo.project.controllers;
 
+import blps.duo.project.dto.ApiToken;
 import blps.duo.project.dto.DeletePersonRequest;
 import blps.duo.project.dto.PersonResponse;
 import blps.duo.project.dto.SingUpRequest;
@@ -20,16 +21,15 @@ public class PersonController {
 
     private PersonService personService;
 
-    @GetMapping("/{id}")
-    public Mono<ResponseEntity<PersonResponse>> getPerson(@PathVariable long id) {
-//        return personService.findPersonById(id)
-//                .map(ResponseEntity::ok)
-//                .defaultIfEmpty(ResponseEntity.notFound().build());
-        return null;
+    @GetMapping
+    @ResponseStatus(HttpStatus.OK)
+    public Mono<PersonResponse> getPerson(@RequestHeader ApiToken apiToken) {
+        return personService.findPersonById(apiToken)
+                .defaultIfEmpty();
     }
 
-    @GetMapping
-    public Flux<PersonResponse> listStudents(@RequestParam(name = "name", required = false) String name) {
+    @GetMapping("/all")
+    public Flux<PersonResponse> listStudents(String name) {
 //        return personService.findStudentsByName(name);
         return null;
     }
