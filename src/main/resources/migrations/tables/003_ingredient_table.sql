@@ -1,10 +1,11 @@
 --liquibase formatted sql
 
---changeset alex_pletnev:1
-create table race
+--changeset ivan_ponomarev:3
+create table ingredient
 (
     id   bigint unique not null,
     name text unique   not null,
+    description text not null,
     primary key (id)
 )
---rollback drop table race
+--rollback drop table ingredient

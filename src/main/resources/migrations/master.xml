@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--suppress XmlUnusedNamespaceDeclaration -->
+<databaseChangeLog
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd
+        http://www.liquibase.org/xml/ns/dbchangelog-ext
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+        <include file="tables/001_race_table.sql"/>
+        <include file="tables/002_person_table.sql"/>
+        <include file="tables/003_ingredient_table.sql"/>
+        <include file="tables/004_recipe_table.sql"/>
+        <include file="tables/005_recipe_ingredient_relation.sql"/>
+        <include file="tables/006_race_relationship.sql"/>
+        <include file="tables/007_statistic.sql"/>
+</databaseChangeLog>
