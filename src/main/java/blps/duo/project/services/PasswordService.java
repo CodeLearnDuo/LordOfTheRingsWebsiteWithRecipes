@@ -7,15 +7,22 @@ import org.springframework.stereotype.Service;
 import java.util.concurrent.CompletableFuture;
 
 @Service
-public class PasswordEncoderService {
+public class PasswordService {
 
     private static final int FACTOR = 12;
 
     private final BCrypt.Hasher hasher = BCrypt.withDefaults();
+    private final BCrypt.Verifyer verifyer = BCrypt.verifyer();
 
     @Async
-    public CompletableFuture<String> encodePassword(String rawPassword) {
+    public CompletableFuture<String> passwordEncode(String rawPassword) {
         String encodedPassword = hasher.hashToString(FACTOR, rawPassword.toCharArray());
         return CompletableFuture.completedFuture(encodedPassword);
+    }
+
+    @Async
+    public  CompletableFuture<Boolean> passwordAuthentication(String excepted, String actual) {
+        boolean solution = verifyer.verify(actual.toCharArray(), excepted.toCharArray()).verified;
+        return CompletableFuture.completedFuture(solution);
     }
 }
