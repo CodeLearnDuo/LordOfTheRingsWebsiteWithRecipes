@@ -18,4 +18,10 @@ public class Person {
     @Column("a_leader")
     private boolean aLeader;
 
+    public Person(String email, String username, String password, Long personRaceId) {
+        this.email = email;
+        this.username = username;
+        this.password = password;
+        this.personRaceId = personRaceId;
+    }
 }
