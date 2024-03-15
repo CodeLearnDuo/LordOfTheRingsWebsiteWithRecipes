@@ -25,9 +25,9 @@ public class PersonController {
         return personService.getPersonById(apiToken);
     }
 
-    @PostMapping("/singUp")
-    @ResponseStatus(HttpStatus.OK)
-    public Mono<ApiToken> singUp(@RequestBody SingUpRequest singUpRequest) {
+    @PostMapping("/signUp")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Mono<ApiToken> signUp(@RequestBody SingUpRequest singUpRequest) {
         //TODO validation
         return personService.singUp(singUpRequest);
     }
