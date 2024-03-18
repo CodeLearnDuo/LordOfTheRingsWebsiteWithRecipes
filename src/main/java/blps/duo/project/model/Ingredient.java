@@ -7,7 +7,6 @@ import org.springframework.data.relational.core.mapping.Table;
 @Data
 @Table("ingredient")
 public class Ingredient {
-
     @Id
     private Long id;
     private String name;
