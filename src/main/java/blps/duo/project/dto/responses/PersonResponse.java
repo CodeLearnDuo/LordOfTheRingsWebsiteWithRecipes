@@ -1,4 +1,4 @@
-package blps.duo.project.dto;
+package blps.duo.project.dto.responses;
 
 public record PersonResponse(
         Long id,

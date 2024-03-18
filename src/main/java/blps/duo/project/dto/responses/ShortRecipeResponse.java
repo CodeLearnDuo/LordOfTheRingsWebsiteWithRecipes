@@ -1,4 +1,6 @@
-package blps.duo.project.dto;
+package blps.duo.project.dto.responses;
+
+import blps.duo.project.dto.responses.RaceResponse;
 
 public record ShortRecipeResponse(
         Long id,

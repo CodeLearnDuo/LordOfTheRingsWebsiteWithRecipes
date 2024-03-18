@@ -1,6 +1,10 @@
 package blps.duo.project.controllers;
 
 import blps.duo.project.dto.*;
+import blps.duo.project.dto.requests.DeletePersonRequest;
+import blps.duo.project.dto.requests.SingInRequest;
+import blps.duo.project.dto.requests.SingUpRequest;
+import blps.duo.project.dto.responses.PersonResponse;
 import blps.duo.project.services.PersonService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;

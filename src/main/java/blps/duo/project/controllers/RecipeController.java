@@ -1,7 +1,7 @@
 package blps.duo.project.controllers;
 
-import blps.duo.project.dto.RecipeResponse;
-import blps.duo.project.dto.ShortRecipeResponse;
+import blps.duo.project.dto.responses.RecipeResponse;
+import blps.duo.project.dto.responses.ShortRecipeResponse;
 import blps.duo.project.services.RecipeService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;

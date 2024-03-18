@@ -1,7 +1,7 @@
 package blps.duo.project.services;
 
-import blps.duo.project.dto.RecipeResponse;
-import blps.duo.project.dto.ShortRecipeResponse;
+import blps.duo.project.dto.responses.RecipeResponse;
+import blps.duo.project.dto.responses.ShortRecipeResponse;
 import blps.duo.project.repositories.RecipeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -52,6 +52,8 @@ public class RecipeService {
                                                         ))
                                 );
     }
+
+
 
 
 }
