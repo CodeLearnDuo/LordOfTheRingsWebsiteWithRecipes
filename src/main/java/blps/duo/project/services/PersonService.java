@@ -101,6 +101,7 @@ public class PersonService {
                 );
     }
 
+    @Transactional
     public Mono<Void> delete(Long personId, ApiToken apiToken, DeletePersonRequest deletePersonRequest) {
         return apiTokenService.getApiTokenOwner(apiToken)
                 .switchIfEmpty(Mono.error(new AuthorizationException()))
