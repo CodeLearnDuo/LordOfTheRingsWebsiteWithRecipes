@@ -1,10 +1,8 @@
 package blps.duo.project.services;
 
-import blps.duo.project.dto.ApiToken;
-import blps.duo.project.dto.PersonResponse;
-import blps.duo.project.dto.SingInRequest;
-import blps.duo.project.dto.SingUpRequest;
+import blps.duo.project.dto.*;
 import blps.duo.project.exceptions.AuthenticationException;
+import blps.duo.project.exceptions.AuthorizationException;
 import blps.duo.project.exceptions.PersonAlreadyExistsException;
 import blps.duo.project.exceptions.RaceNotFoundException;
 import blps.duo.project.model.Person;
@@ -15,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Objects;
+
 @Service
 @RequiredArgsConstructor
 public class PersonService {
@@ -23,15 +23,15 @@ public class PersonService {
     private final PersonRepository personRepository;
     private final RaceService raceService;
     private final PasswordService passwordService;
+    private final ApiTokenService apiTokenService;
 
-    public Mono<PersonResponse> getPersonById(ApiToken apiToken) {
+    public Mono<PersonResponse> getPersonResponseById(Long id) {
         return personRepository
-                .findById(apiToken.apiToken())
+                .findById(id)
                 .flatMap(p ->
                         raceService.getRaceResponseById(p.getPersonRaceId())
                                 .map(race -> new PersonResponse(
                                         p.getId(),
-                                        p.getEmail(),
                                         p.getUsername(),
                                         race,
                                         p.isALeader())
@@ -39,14 +39,13 @@ public class PersonService {
                 );
     }
 
-    public Flux<PersonResponse> getAllPersons() {
+    public Flux<PersonResponse> getAllPersonResponses() {
         return personRepository
                 .findAll()
                 .flatMap(p ->
                         raceService.getRaceResponseById(p.getPersonRaceId())
                                 .map(race -> new PersonResponse(
                                         p.getId(),
-                                        p.getEmail(),
                                         p.getUsername(),
                                         race,
                                         p.isALeader())
@@ -86,7 +85,8 @@ public class PersonService {
                 .findByEmail(singInRequest.email())
                 .switchIfEmpty(Mono.error(new AuthenticationException()))
                 .flatMap(person -> Mono.fromFuture(
-                                passwordService.passwordAuthentication(person.getPassword(), singInRequest.password()))
+                                        passwordService.passwordAuthentication(person.getPassword(), singInRequest.password())
+                                )
                         .flatMap(solution -> {
                             if (solution) {
                                 return Mono.just(new ApiToken(person.getId()));
@@ -95,5 +95,25 @@ public class PersonService {
                             }
                         })
                 );
+    }
+
+    public Mono<Void> delete(Long personId, ApiToken apiToken, DeletePersonRequest deletePersonRequest) {
+        return apiTokenService.getApiTokenOwner(apiToken)
+                .switchIfEmpty(Mono.error(new AuthorizationException()))
+                .flatMap(person -> {
+                    if (!Objects.equals(personId, person.getId())) {
+                        return Mono.error(new AuthorizationException());
+                    } else {
+                        return Mono.fromFuture(
+                                passwordService.passwordAuthentication(person.getPassword(), deletePersonRequest.password())
+                        ).flatMap(solution -> {
+                            if (solution) {
+                                return personRepository.deleteById(personId);
+                            } else {
+                                return Mono.error(new AuthorizationException());
+                            }
+                        });
+                    }
+                });
     }
 }

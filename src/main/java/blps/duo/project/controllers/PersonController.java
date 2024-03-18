@@ -1,9 +1,6 @@
 package blps.duo.project.controllers;
 
-import blps.duo.project.dto.ApiToken;
-import blps.duo.project.dto.PersonResponse;
-import blps.duo.project.dto.SingInRequest;
-import blps.duo.project.dto.SingUpRequest;
+import blps.duo.project.dto.*;
 import blps.duo.project.services.PersonService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -20,16 +17,16 @@ public class PersonController {
 
     private PersonService personService;
 
-    @GetMapping
+    @GetMapping("/{id}")
     @ResponseStatus(HttpStatus.OK)
-    public Mono<PersonResponse> getPerson(@RequestHeader ApiToken apiToken) {
+    public Mono<PersonResponse> getPerson(@PathVariable Long id) {
         //TODO validation
-        return personService.getPersonById(apiToken);
+        return personService.getPersonResponseById(id);
     }
 
     @GetMapping("/all")
     public Flux<PersonResponse> getAllPersons() {
-        return personService.getAllPersons();
+        return personService.getAllPersonResponses();
     }
 
     @PostMapping("/signUp")
@@ -44,5 +41,12 @@ public class PersonController {
     public Mono<ApiToken> singIn(@RequestBody SingInRequest singInRequest) {
         //TODO validation
         return personService.singIn(singInRequest);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.OK)
+    public Mono<Void> deletePerson(@PathVariable Long id, @RequestHeader("ApiToken") ApiToken apiToken, @RequestBody DeletePersonRequest deletePersonRequest) {
+        //TODO validation
+        return personService.delete(id, apiToken, deletePersonRequest);
     }
 }
