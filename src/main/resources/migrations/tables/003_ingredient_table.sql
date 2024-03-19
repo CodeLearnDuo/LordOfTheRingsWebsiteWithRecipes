@@ -4,8 +4,9 @@
 create table ingredient
 (
     id   bigint unique not null,
-    name text unique   not null,
+    name text   not null,
     description text not null,
-    primary key (id)
+    primary key (id),
+    unique (name, description)
 )
 --rollback drop table ingredient

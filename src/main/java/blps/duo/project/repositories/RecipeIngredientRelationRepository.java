@@ -9,5 +9,4 @@ import reactor.core.publisher.Flux;
 public interface RecipeIngredientRelationRepository extends ReactiveCrudRepository<RecipeIngredientRelation, Long> {
 
     Flux<RecipeIngredientRelation> findAllByRecipeId(Long recipeId);
-
 }

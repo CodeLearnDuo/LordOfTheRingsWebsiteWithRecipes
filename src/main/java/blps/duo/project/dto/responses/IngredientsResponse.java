@@ -1,9 +1,7 @@
 package blps.duo.project.dto.responses;
 
-public record IngredientsResponse(
-        Long id,
+public record IngredientsResponse (
         String name,
-        String description,
-        String weight
+        String description
 ) {
 }

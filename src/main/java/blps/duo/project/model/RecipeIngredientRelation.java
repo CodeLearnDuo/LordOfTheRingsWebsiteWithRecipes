@@ -14,4 +14,9 @@ public class RecipeIngredientRelation {
     private Long recipeId;
     @Column("ingredient_id")
     private Long ingredientId;
+
+    public RecipeIngredientRelation(Long recipeId, Long ingredientId) {
+        this.recipeId = recipeId;
+        this.ingredientId = ingredientId;
+    }
 }

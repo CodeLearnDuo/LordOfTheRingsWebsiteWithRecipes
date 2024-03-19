@@ -1,8 +1,5 @@
 package blps.duo.project.dto.responses;
 
-import blps.duo.project.dto.responses.IngredientsResponse;
-import blps.duo.project.dto.responses.RaceResponse;
-
 import java.util.List;
 
 public record RecipeResponse(

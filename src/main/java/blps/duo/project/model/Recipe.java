@@ -18,4 +18,10 @@ public class Recipe {
     private Long raceId;
     private double rank;
 
+    public Recipe(String title, String description, byte[] logo, Long raceId) {
+        this.title = title;
+        this.description = description;
+        this.logo = logo;
+        this.raceId = raceId;
+    }
 }
