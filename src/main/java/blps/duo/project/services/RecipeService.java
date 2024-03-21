@@ -3,7 +3,6 @@ package blps.duo.project.services;
 import blps.duo.project.dto.ApiToken;
 import blps.duo.project.dto.requests.AddRecipeRequest;
 import blps.duo.project.dto.requests.ScoreRequest;
-import blps.duo.project.dto.responses.IngredientsResponse;
 import blps.duo.project.dto.responses.RaceResponse;
 import blps.duo.project.dto.responses.RecipeResponse;
 import blps.duo.project.dto.responses.ShortRecipeResponse;
