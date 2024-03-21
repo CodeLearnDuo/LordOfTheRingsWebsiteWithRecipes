@@ -2,12 +2,12 @@ package blps.duo.project.services;
 
 import blps.duo.project.dto.ApiToken;
 import blps.duo.project.dto.requests.AddRecipeRequest;
-import blps.duo.project.dto.requests.DeletePersonRequest;
 import blps.duo.project.dto.responses.RaceResponse;
 import blps.duo.project.dto.responses.RecipeResponse;
 import blps.duo.project.dto.responses.ShortRecipeResponse;
 import blps.duo.project.exceptions.AuthorizationException;
-import blps.duo.project.model.Ingredient;
+import blps.duo.project.exceptions.NoSuchRecipeException;
+import blps.duo.project.model.Race;
 import blps.duo.project.model.Recipe;
 import blps.duo.project.repositories.IngredientRepository;
 import blps.duo.project.repositories.RecipeRepository;
@@ -16,6 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuples;
+
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -31,8 +34,9 @@ public class RecipeService {
 
         return recipeRepository
                 .findById(recipeId)
+                .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
                 .flatMap(recipe ->
-                        raceService.getRaceResponseById(recipe.getRaceId())
+                        raceService.getRaceById(recipe.getRaceId())
                                 .flatMap(raceResponse ->
                                         ingredientService.getAllRecipesIngredients(recipeId)
                                                 .collectList()
@@ -42,7 +46,7 @@ public class RecipeService {
                                                                 recipe.getTitle(),
                                                                 recipe.getDescription(),
                                                                 recipe.getLogo(),
-                                                                raceResponse,
+                                                                new RaceResponse(raceResponse.getName()),
                                                                 ingredients,
                                                                 recipe.getRank()
                                                         ))
@@ -52,39 +56,71 @@ public class RecipeService {
     public Flux<ShortRecipeResponse> getAllShortRecipes() {
         return recipeRepository.findAll()
                 .flatMap(recipe ->
-                        raceService.getRaceResponseById(recipe.getRaceId())
-                                                .map(raceResponse ->
-                                                        new ShortRecipeResponse(
-                                                                recipe.getId(),
-                                                                recipe.getTitle(),
-                                                                recipe.getLogo(),
-                                                                raceResponse,
-                                                                recipe.getRank()
-                                                        ))
-                                );
+                        raceService.getRaceById(recipe.getRaceId())
+                                .map(raceResponse ->
+                                        new ShortRecipeResponse(
+                                                recipe.getId(),
+                                                recipe.getTitle(),
+                                                recipe.getLogo(),
+                                                new RaceResponse(raceResponse.getName()),
+                                                recipe.getRank()
+                                        ))
+                );
     }
 
-//    @Transactional
-//    public Mono<RecipeResponse> addRecipe(Long personId, ApiToken apiToken, AddRecipeRequest addRecipeRequest) {
-//        return apiTokenService.getApiTokenOwner(apiToken)
-//                .switchIfEmpty(Mono.error(new AuthorizationException()))
-//                .flatMap(person ->
-//                       (raceService.getRaceResponseById(personId)
-//                               .map(RaceResponse::name))
-//                               .flatMap(raceService::getRaceByRaceName)
-//                                .flatMap(raceResponse ->
-//                                        recipeRepository.save(new Recipe(
-//                                                addRecipeRequest.title(),
-//                                                addRecipeRequest.description(),
-//                                                addRecipeRequest.logo(),
-//                                                raceResponse.getId()
-//                                                )
-//                                        )
-//                                )
-//                               .flatMap(recipe -> ingredientService.saveAllIngredientsForRecipeId(recipe.getId(), addRecipeRequest.ingredients())
-//
-//                               )))
-//                )
-//    }
+    @Transactional
+    public Mono<RecipeResponse> addRecipe(ApiToken apiToken, AddRecipeRequest addRecipeRequest) {
+        return apiTokenService.getApiTokenOwner(apiToken)
+                .switchIfEmpty(Mono.error(new AuthorizationException()))
+                .flatMap(person ->
+                        (raceService.getRaceById(apiToken.apiToken())
+                                .map(Race::getName))
+                                .flatMap(raceService::getRaceByRaceName)
+                                .flatMap(race ->
+                                        recipeRepository.save(new Recipe(
+                                                        addRecipeRequest.title(),
+                                                        addRecipeRequest.description(),
+                                                        addRecipeRequest.logo(),
+                                                        race.getId()
+                                                )
+                                        ).flatMap(recipe -> ingredientService.saveAllIngredientsForRecipeId(recipe.getId(), addRecipeRequest.ingredients())
+                                                .collectList()
+                                                .flatMap(ingredientsResponseList ->
+                                                        Mono.just(new RecipeResponse(
+                                                                recipe.getId(),
+                                                                recipe.getTitle(),
+                                                                recipe.getDescription(),
+                                                                recipe.getLogo(),
+                                                                new RaceResponse(race.getName()),
+                                                                ingredientsResponseList,
+                                                                recipe.getRank()
+                                                        ))
+
+                                                )))
+                );
+    }
+
+    public Flux<ShortRecipeResponse> findRecipeByName(String recipeName) {
+
+        final Pattern pattern = Pattern.compile(recipeName);
+
+        return recipeRepository.findAll()
+                .filter(recipe -> pattern.matcher(recipe.getTitle()).find())
+                .flatMap(recipe ->
+                        raceService.getRaceById(recipe.getRaceId())
+                                .map(race -> Tuples.of(recipe, race))
+                )
+                .map(tuple -> {
+                    var recipe = tuple.getT1();
+                    var race = tuple.getT2();
+                    return new ShortRecipeResponse(
+                            recipe.getId(),
+                            recipe.getTitle(),
+                            recipe.getLogo(),
+                            new RaceResponse(race.getName()),
+                            recipe.getRank()
+                    );
+                });
+    }
 
 }

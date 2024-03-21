@@ -9,4 +9,5 @@ import reactor.core.publisher.Mono;
 public interface RaceRepository extends ReactiveCrudRepository<Race, Long> {
 
     Mono<Race> findRaceByName(String name);
+
 }

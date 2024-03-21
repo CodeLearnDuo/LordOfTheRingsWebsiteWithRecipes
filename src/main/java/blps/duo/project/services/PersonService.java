@@ -5,6 +5,7 @@ import blps.duo.project.dto.requests.DeletePersonRequest;
 import blps.duo.project.dto.requests.SingInRequest;
 import blps.duo.project.dto.requests.SingUpRequest;
 import blps.duo.project.dto.responses.PersonResponse;
+import blps.duo.project.dto.responses.RaceResponse;
 import blps.duo.project.exceptions.AuthenticationException;
 import blps.duo.project.exceptions.AuthorizationException;
 import blps.duo.project.exceptions.PersonAlreadyExistsException;
@@ -33,11 +34,11 @@ public class PersonService {
         return personRepository
                 .findById(id)
                 .flatMap(p ->
-                        raceService.getRaceResponseById(p.getPersonRaceId())
+                        raceService.getRaceById(p.getPersonRaceId())
                                 .map(race -> new PersonResponse(
                                         p.getId(),
                                         p.getUsername(),
-                                        race,
+                                        new RaceResponse(race.getName()),
                                         p.isALeader())
                                 )
                 );
@@ -47,11 +48,11 @@ public class PersonService {
         return personRepository
                 .findAll()
                 .flatMap(p ->
-                        raceService.getRaceResponseById(p.getPersonRaceId())
+                        raceService.getRaceById(p.getPersonRaceId())
                                 .map(race -> new PersonResponse(
                                         p.getId(),
                                         p.getUsername(),
-                                        race,
+                                        new RaceResponse(race.getName()),
                                         p.isALeader())
                                 )
                 );
