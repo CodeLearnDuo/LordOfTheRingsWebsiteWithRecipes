@@ -2,6 +2,7 @@ package blps.duo.project.controllers;
 
 import blps.duo.project.dto.ApiToken;
 import blps.duo.project.dto.requests.AddRecipeRequest;
+import blps.duo.project.dto.requests.ScoreRequest;
 import blps.duo.project.dto.responses.RecipeResponse;
 import blps.duo.project.dto.responses.ShortRecipeResponse;
 import blps.duo.project.services.RecipeService;
@@ -39,6 +40,12 @@ public class RecipeController {
     public Mono<RecipeResponse> addRecipe(@RequestHeader("ApiToken") @Valid ApiToken apiToken, @RequestBody @Valid AddRecipeRequest addRecipeRequest) {
         //TODO validation
         return recipeService.addRecipe(apiToken, addRecipeRequest);
+    }
+
+    @PatchMapping("/estimation")
+    public Mono<RecipeResponse> estimate(@RequestHeader("ApiToken") @Valid ApiToken apiToken, @RequestBody @Valid ScoreRequest scoreRequest) {
+        //TODO validation
+        return recipeService.estimate(apiToken, scoreRequest);
     }
 
 

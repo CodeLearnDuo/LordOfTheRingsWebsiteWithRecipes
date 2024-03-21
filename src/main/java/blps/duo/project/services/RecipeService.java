@@ -2,6 +2,8 @@ package blps.duo.project.services;
 
 import blps.duo.project.dto.ApiToken;
 import blps.duo.project.dto.requests.AddRecipeRequest;
+import blps.duo.project.dto.requests.ScoreRequest;
+import blps.duo.project.dto.responses.IngredientsResponse;
 import blps.duo.project.dto.responses.RaceResponse;
 import blps.duo.project.dto.responses.RecipeResponse;
 import blps.duo.project.dto.responses.ShortRecipeResponse;
@@ -9,7 +11,6 @@ import blps.duo.project.exceptions.AuthorizationException;
 import blps.duo.project.exceptions.NoSuchRecipeException;
 import blps.duo.project.model.Race;
 import blps.duo.project.model.Recipe;
-import blps.duo.project.repositories.IngredientRepository;
 import blps.duo.project.repositories.RecipeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuples;
 
+import java.sql.Timestamp;
 import java.util.regex.Pattern;
 
 @Service
@@ -28,7 +30,8 @@ public class RecipeService {
     private final RaceService raceService;
     private final IngredientService ingredientService;
     private final ApiTokenService apiTokenService;
-    private final IngredientRepository ingredientRepository;
+    private final RaceRelationshipsService raceRelationshipsService;
+    private final StatisticService statisticService;
 
     public Mono<RecipeResponse> getRecipeResponseById(Long recipeId) {
 
@@ -121,6 +124,31 @@ public class RecipeService {
                             recipe.getRank()
                     );
                 });
+    }
+
+    public Mono<RecipeResponse> estimate(ApiToken apiToken, ScoreRequest scoreRequest) {
+
+        Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+        return apiTokenService.getApiTokenOwner(apiToken)
+                .switchIfEmpty(Mono.error(new AuthorizationException()))
+                .flatMap(person -> raceRelationshipsService.findRelationshipByIds(apiToken.apiToken(), scoreRequest.recipeId()))
+                .flatMap(raceRelationship -> {
+                    double estimation = scoreRequest.value() ? raceRelationship.getRelationshipCoefficient() : -1 * (1 - raceRelationship.getRelationshipCoefficient());
+                    return recipeRepository.findById(scoreRequest.recipeId())
+                            .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
+                            .flatMap(recipe -> {
+                                recipe.setRank(recipe.getRank() + estimation);
+                                return recipeRepository.save(recipe);
+                            });
+                })
+                .flatMap(recipe -> getRecipeResponseById(recipe.getId()))
+                .flatMap(response -> statisticService.collectData(
+                        apiToken.apiToken(),
+                        scoreRequest.recipeId(),
+                        scoreRequest.value(),
+                        timestamp
+                ).then(Mono.just(response)));
     }
 
 }
