@@ -3,7 +3,7 @@
 --changeset ivan_ponomarev:3
 create table ingredient
 (
-    id   bigint unique not null,
+    id bigserial unique not null,
     name text   not null,
     description text not null,
     primary key (id),

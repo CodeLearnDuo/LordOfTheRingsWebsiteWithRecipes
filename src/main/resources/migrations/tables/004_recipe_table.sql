@@ -3,11 +3,11 @@
 --changeset ivan_ponomarev:4
 create table recipe
 (
-    id          bigint unique not null,
+    id      bigserial unique not null,
     title       text          not null,
     description text          not null,
     logo        bytea,
-    race_id     bigint unique not null,
+    race_id bigint           not null,
     rank        numeric default 0,
     primary key (id)
 )

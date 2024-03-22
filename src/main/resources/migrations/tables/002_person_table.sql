@@ -3,7 +3,7 @@
 --changeset alex_pletnev:2
 create table person
 (
-    id             bigint unique not null,
+    id bigserial unique not null,
     email          text unique   not null,
     username       text          not null,
     password       text          not null,

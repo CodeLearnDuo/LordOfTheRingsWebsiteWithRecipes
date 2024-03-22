@@ -21,7 +21,7 @@ import javax.validation.Valid;
 @Data
 public class PersonController {
 
-    private PersonService personService;
+    private final PersonService personService;
 
     @GetMapping("/{id}")
     @ResponseStatus(HttpStatus.OK)

@@ -3,10 +3,11 @@
 --changeset ivan_ponomarev:7
 create table statistic
 (
-    id        bigint unique not null,
-    person_id bigint unique not null,
-    recipe_id bigint unique not null,
+    id        bigserial unique not null,
+    person_id bigint           not null,
+    recipe_id bigint           not null,
     value     boolean       not null,
-    primary key (id)
+    primary key (id),
+    unique (person_id, recipe_id)
 )
 --rollback drop table statistic
