@@ -6,7 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
@@ -17,12 +17,12 @@ import java.time.LocalDateTime;
 public class GlobalExceptionsHandler {
 
     @ExceptionHandler(AuthorizationException.class)
-    public Mono<ServerResponse> handleAuthorizationException(AuthorizationException ex, WebRequest request) {
+    public Mono<ServerResponse> handleAuthorizationException(AuthorizationException ex, ServerRequest request) {
         return ServerResponse.status(HttpStatus.BAD_REQUEST)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(new ApiErrorResponse(
                         Timestamp.valueOf(LocalDateTime.now()),
-                        request.getContextPath(),
+                        request.path(),
                         HttpStatus.BAD_REQUEST.value(),
                         ex.toString(),
                         "Error with Authorization"
@@ -30,12 +30,12 @@ public class GlobalExceptionsHandler {
     }
 
     @ExceptionHandler(AuthenticationException.class)
-    public Mono<ServerResponse> handleAuthenticationException(AuthenticationException ex, WebRequest request) {
+    public Mono<ServerResponse> handleAuthenticationException(AuthenticationException ex, ServerRequest request) {
         return ServerResponse.status(HttpStatus.BAD_REQUEST)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(new ApiErrorResponse(
                         Timestamp.valueOf(LocalDateTime.now()),
-                        request.getContextPath(),
+                        request.path(),
                         HttpStatus.BAD_REQUEST.value(),
                         ex.toString(),
                         "Error with Authentication"
@@ -43,12 +43,12 @@ public class GlobalExceptionsHandler {
     }
 
     @ExceptionHandler(NoSuchRecipeException.class)
-    public Mono<ServerResponse> handleNoSuchRecipeException(NoSuchRecipeException ex, WebRequest request) {
+    public Mono<ServerResponse> handleNoSuchRecipeException(NoSuchRecipeException ex, ServerRequest request) {
         return ServerResponse.status(HttpStatus.NOT_FOUND)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(new ApiErrorResponse(
                         Timestamp.valueOf(LocalDateTime.now()),
-                        request.getContextPath(),
+                        request.path(),
                         HttpStatus.NOT_FOUND.value(),
                         ex.toString(),
                         "Not exist recipe"
@@ -56,12 +56,12 @@ public class GlobalExceptionsHandler {
     }
 
     @ExceptionHandler(PersonAlreadyExistsException.class)
-    public Mono<ServerResponse> handlePersonAlreadyExistsException(PersonAlreadyExistsException ex, WebRequest request) {
+    public Mono<ServerResponse> handlePersonAlreadyExistsException(PersonAlreadyExistsException ex, ServerRequest request) {
         return ServerResponse.status(HttpStatus.BAD_REQUEST)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(new ApiErrorResponse(
                         Timestamp.valueOf(LocalDateTime.now()),
-                        request.getContextPath(),
+                        request.path(),
                         HttpStatus.BAD_REQUEST.value(),
                         ex.toString(),
                         "Email is already taken"
@@ -69,12 +69,12 @@ public class GlobalExceptionsHandler {
     }
 
     @ExceptionHandler(RaceNotFoundException.class)
-    public Mono<ServerResponse> handleRaceNotFoundException(RaceNotFoundException ex, WebRequest request) {
+    public Mono<ServerResponse> handleRaceNotFoundException(RaceNotFoundException ex, ServerRequest request) {
         return ServerResponse.status(HttpStatus.BAD_REQUEST)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(new ApiErrorResponse(
                         Timestamp.valueOf(LocalDateTime.now()),
-                        request.getContextPath(),
+                        request.path(),
                         HttpStatus.BAD_REQUEST.value(),
                         ex.toString(),
                         "This race does not exist"
