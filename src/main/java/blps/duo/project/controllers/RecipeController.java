@@ -42,7 +42,7 @@ public class RecipeController {
         return recipeService.addRecipe(apiToken, addRecipeRequest);
     }
 
-    @PatchMapping("/estimation")
+    @PostMapping("/estimation")
     public Mono<RecipeResponse> estimate(@RequestHeader("ApiToken") @Valid ApiToken apiToken, @RequestBody @Valid ScoreRequest scoreRequest) {
         //TODO validation
         return recipeService.estimate(apiToken, scoreRequest);
