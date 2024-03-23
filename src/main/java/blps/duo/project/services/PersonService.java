@@ -63,7 +63,7 @@ public class PersonService {
         return personRepository
                 .existsByEmail(singUpRequest.email())
                 .flatMap(exists -> {
-                    if (exists) {
+                    if (Boolean.TRUE.equals(exists)) {
                         return Mono.error(new PersonAlreadyExistsException());
                     } else {
                         return raceService
@@ -93,7 +93,7 @@ public class PersonService {
                                         passwordService.passwordAuthentication(person.getPassword(), singInRequest.password())
                                 )
                         .flatMap(solution -> {
-                            if (solution) {
+                            if (Boolean.TRUE.equals(solution)) {
                                 return Mono.just(new ApiToken(person.getId()));
                             } else {
                                 return Mono.error(new AuthenticationException());
@@ -113,7 +113,7 @@ public class PersonService {
                         return Mono.fromFuture(
                                 passwordService.passwordAuthentication(person.getPassword(), deletePersonRequest.password())
                         ).flatMap(solution -> {
-                            if (solution) {
+                            if (Boolean.TRUE.equals(solution)) {
                                 return personRepository.deleteById(personId);
                             } else {
                                 return Mono.error(new AuthorizationException());
