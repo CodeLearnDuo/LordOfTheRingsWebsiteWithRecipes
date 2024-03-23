@@ -75,7 +75,7 @@ public class RecipeService {
         return apiTokenService.getApiTokenOwner(apiToken)
                 .switchIfEmpty(Mono.error(new AuthorizationException()))
                 .flatMap(person ->
-                        (raceService.getRaceById(apiToken.apiToken())
+                        (raceService.getRaceById(person.getPersonRaceId())
                                 .map(Race::getName))
                                 .flatMap(raceService::getRaceByRaceName)
                                 .flatMap(race ->

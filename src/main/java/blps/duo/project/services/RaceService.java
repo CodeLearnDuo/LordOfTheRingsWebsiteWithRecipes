@@ -1,7 +1,5 @@
 package blps.duo.project.services;
 
-import blps.duo.project.dto.responses.RaceResponse;
-import blps.duo.project.exceptions.AuthorizationException;
 import blps.duo.project.exceptions.RaceNotFoundException;
 import blps.duo.project.model.Race;
 import blps.duo.project.repositories.RaceRepository;
