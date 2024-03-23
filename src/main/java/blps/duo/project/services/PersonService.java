@@ -6,10 +6,7 @@ import blps.duo.project.dto.requests.SingInRequest;
 import blps.duo.project.dto.requests.SingUpRequest;
 import blps.duo.project.dto.responses.PersonResponse;
 import blps.duo.project.dto.responses.RaceResponse;
-import blps.duo.project.exceptions.AuthenticationException;
-import blps.duo.project.exceptions.AuthorizationException;
-import blps.duo.project.exceptions.PersonAlreadyExistsException;
-import blps.duo.project.exceptions.RaceNotFoundException;
+import blps.duo.project.exceptions.*;
 import blps.duo.project.model.Person;
 import blps.duo.project.repositories.PersonRepository;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +30,7 @@ public class PersonService {
     public Mono<PersonResponse> getPersonResponseById(Long id) {
         return personRepository
                 .findById(id)
+                .switchIfEmpty(Mono.error(new PersonNotFoundException()))
                 .flatMap(p ->
                         raceService.getRaceById(p.getPersonRaceId())
                                 .map(race -> new PersonResponse(
@@ -121,5 +119,10 @@ public class PersonService {
                         });
                     }
                 });
+    }
+
+    public Mono<Person> getPersonById(Long personId) {
+        return personRepository.findById(personId)
+                .switchIfEmpty(Mono.error(new PersonNotFoundException()));
     }
 }

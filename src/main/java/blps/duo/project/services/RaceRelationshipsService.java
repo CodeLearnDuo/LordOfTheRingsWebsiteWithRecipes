@@ -1,9 +1,10 @@
 package blps.duo.project.services;
 
+import blps.duo.project.exceptions.NoSuchRecipeException;
 import blps.duo.project.exceptions.RaceRelationshipNotFoundException;
-import blps.duo.project.model.Race;
 import blps.duo.project.model.RaceRelationship;
 import blps.duo.project.repositories.RaceRelationshipsRepository;
+import blps.duo.project.repositories.RecipeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -13,16 +14,19 @@ import reactor.core.publisher.Mono;
 public class RaceRelationshipsService {
 
     private final RaceRelationshipsRepository raceRelationshipsRepository;
-    private final RaceService raceService;
+    private final PersonService personService;
+    private final RecipeRepository recipeRepository;
 
     public Mono<RaceRelationship> findRelationshipByIds(Long personId, Long recipeId) {
         return Mono.zip(
-                raceService.getRaceById(personId)
-                        .map(Race::getId),
-                raceService.getRaceById(recipeId)
-                        .map(Race::getId)
-        ).flatMap(tuple -> raceRelationshipsRepository
-                .findRaceRelationshipByPersonRaceIdAndRecipeRaceId(tuple.getT1(), tuple.getT2())
-                .switchIfEmpty(Mono.error(new RaceRelationshipNotFoundException())));
+                        personService.getPersonById(personId),
+                        recipeRepository.findById(recipeId).switchIfEmpty(Mono.error(new NoSuchRecipeException()))
+                )
+                .flatMap(tuple -> {
+                    Long personRaceId = tuple.getT1().getPersonRaceId();
+                    Long recipeRaceId = tuple.getT2().getRaceId();
+                    return raceRelationshipsRepository.findRaceRelationshipByPersonRaceIdAndRecipeRaceId(personRaceId, recipeRaceId)
+                            .switchIfEmpty(Mono.error(new RaceRelationshipNotFoundException()));
+                });
     }
 }
