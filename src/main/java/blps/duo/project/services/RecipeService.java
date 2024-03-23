@@ -125,6 +125,7 @@ public class RecipeService {
                 });
     }
 
+    @Transactional
     public Mono<RecipeResponse> estimate(ApiToken apiToken, ScoreRequest scoreRequest) {
 
         Timestamp timestamp = new Timestamp(System.currentTimeMillis());

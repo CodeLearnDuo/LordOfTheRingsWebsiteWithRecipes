@@ -9,6 +9,7 @@ import blps.duo.project.repositories.IngredientRepository;
 import blps.duo.project.repositories.RecipeIngredientRelationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -34,6 +35,7 @@ public class IngredientService {
                                 )));
     }
 
+    @Transactional
     public Flux<IngredientsResponse> saveAllIngredientsForRecipeId(Long recipeId, List<IngredientsRequest> ingredientsRequestList) {
 
         return Flux.fromIterable(ingredientsRequestList)
