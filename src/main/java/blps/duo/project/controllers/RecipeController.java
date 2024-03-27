@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
 import javax.validation.Valid;
 
 @RestController
@@ -25,26 +26,22 @@ public class RecipeController {
     @GetMapping("/{id}")
     @ResponseStatus(HttpStatus.OK)
     public Mono<RecipeResponse> getRecipe(@PathVariable Long id) {
-        //TODO validation
         return recipeService.getRecipeResponseById(id);
     }
 
     @GetMapping
     @ResponseStatus(HttpStatus.OK)
     public Flux<ShortRecipeResponse> getAllShortRecipes() {
-        //TODO validation
         return recipeService.getAllShortRecipes();
     }
 
     @PostMapping
     public Mono<RecipeResponse> addRecipe(@RequestHeader("ApiToken") @Valid ApiToken apiToken, @RequestBody @Valid AddRecipeRequest addRecipeRequest) {
-        //TODO validation
         return recipeService.addRecipe(apiToken, addRecipeRequest);
     }
 
     @PostMapping("/estimation")
     public Mono<RecipeResponse> estimate(@RequestHeader("ApiToken") @Valid ApiToken apiToken, @RequestBody @Valid ScoreRequest scoreRequest) {
-        //TODO validation
         return recipeService.estimate(apiToken, scoreRequest);
     }
 
