@@ -17,12 +17,26 @@ public class StatisticService {
 
     @Transactional
     public Mono<Void> collectData(Long personId, Long recipeId, boolean value, Timestamp at) {
-        statisticRepository.save(new Statistic(
-                personId,
-                recipeId,
-                value,
-                at
-        ));
-        return Mono.empty();
+        return statisticRepository.findStatisticByPersonIdAndRecipeId(personId, recipeId)
+                .flatMap(statistic -> {
+                    statistic.setValue(value);
+                    statistic.setAt(at);
+                    return statisticRepository.save(statistic);
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    Statistic newStatistic = new Statistic(personId, recipeId, value, at);
+                    return statisticRepository.save(newStatistic);
+                })).then();
+
     }
+
+    public Mono<Statistic> findEstimate(Long personId, Long recipeId) {
+        return statisticRepository.findStatisticByPersonIdAndRecipeId(personId, recipeId);
+    }
+
+    public Mono<Void> removeEstimate(Long personId, Long recipeId) {
+        return statisticRepository.removeStatisticByPersonIdAndRecipeId(personId, recipeId);
+    }
+
+
 }

@@ -9,7 +9,9 @@ import blps.duo.project.dto.responses.ShortRecipeResponse;
 import blps.duo.project.exceptions.AuthorizationException;
 import blps.duo.project.exceptions.NoSuchRecipeException;
 import blps.duo.project.model.Race;
+import blps.duo.project.model.RaceRelationship;
 import blps.duo.project.model.Recipe;
+import blps.duo.project.model.Statistic;
 import blps.duo.project.repositories.RecipeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -133,22 +135,65 @@ public class RecipeService {
         return apiTokenService.getApiTokenOwner(apiToken)
                 .switchIfEmpty(Mono.error(new AuthorizationException()))
                 .flatMap(person -> raceRelationshipsService.findRelationshipByIds(apiToken.apiToken(), scoreRequest.recipeId()))
-                .flatMap(raceRelationship -> {
-                    double estimation = scoreRequest.value() ? raceRelationship.getRelationshipCoefficient() : -1 * (1 - raceRelationship.getRelationshipCoefficient());
-                    return recipeRepository.findById(scoreRequest.recipeId())
-                            .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
-                            .flatMap(recipe -> {
-                                recipe.setRank(recipe.getRank() + estimation);
-                                return recipeRepository.save(recipe);
-                            });
-                })
-                .flatMap(recipe -> getRecipeResponseById(recipe.getId()))
-                .flatMap(response -> statisticService.collectData(
-                        apiToken.apiToken(),
-                        scoreRequest.recipeId(),
-                        scoreRequest.value(),
-                        timestamp
-                ).then(Mono.just(response)));
+                .flatMap(raceRelationship ->
+                        statisticService.findEstimate(apiToken.apiToken(), scoreRequest.recipeId())
+                                .flatMap(foundEstimation -> {
+                                    if (foundEstimation.isValue() == scoreRequest.value()) {
+                                        return updateRankByRemovingEstimate(apiToken, scoreRequest, raceRelationship, foundEstimation)
+                                                .flatMap(recipe -> statisticService.removeEstimate(apiToken.apiToken(), scoreRequest.recipeId())
+                                                        .thenReturn(recipe));
+                                    } else {
+                                        return updateRankByChangingEstimate(apiToken, scoreRequest, raceRelationship, foundEstimation)
+                                                .flatMap(recipe -> statisticService.collectData(apiToken.apiToken(), scoreRequest.recipeId(), scoreRequest.value(), timestamp)
+                                                        .thenReturn(recipe));
+                                    }
+                                })
+                                .switchIfEmpty(
+                                        updateRankByAddingEstimate(apiToken, scoreRequest, raceRelationship)
+                                                .flatMap(recipe -> statisticService.collectData(apiToken.apiToken(), scoreRequest.recipeId(), scoreRequest.value(), timestamp)
+                                                        .thenReturn(recipe))
+                                )
+                )
+                .flatMap(recipe -> getRecipeResponseById(recipe.getId()));
     }
+
+
+    private Mono<Recipe> updateRankByRemovingEstimate(ApiToken apiToken, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Statistic foundEstimation) {
+
+        double estimation = foundEstimation.isValue() ? raceRelationship.getRelationshipCoefficient() : -1 * (1 - raceRelationship.getRelationshipCoefficient());
+
+        return recipeRepository.findById(scoreRequest.recipeId())
+                .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
+                .flatMap(recipe -> {
+                    recipe.setRank(recipe.getRank() - estimation);
+                    return recipeRepository.save(recipe);
+                });
+    }
+
+    private Mono<Recipe> updateRankByChangingEstimate(ApiToken apiToken, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Statistic foundEstimation) {
+
+        double currentEstimation = scoreRequest.value() ? raceRelationship.getRelationshipCoefficient() : -1 * (1 - raceRelationship.getRelationshipCoefficient());
+        double previousEstimation = foundEstimation.isValue() ? raceRelationship.getRelationshipCoefficient() : -1 * (1 - raceRelationship.getRelationshipCoefficient());
+
+        return recipeRepository.findById(scoreRequest.recipeId())
+                .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
+                .flatMap(recipe -> {
+                    recipe.setRank(recipe.getRank() - previousEstimation + currentEstimation);
+                    return recipeRepository.save(recipe);
+                });
+    }
+
+    private Mono<Recipe> updateRankByAddingEstimate(ApiToken apiToken, ScoreRequest scoreRequest, RaceRelationship raceRelationship) {
+
+        double estimation = scoreRequest.value() ? raceRelationship.getRelationshipCoefficient() : -1 * (1 - raceRelationship.getRelationshipCoefficient());
+
+        return recipeRepository.findById(scoreRequest.recipeId())
+                .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
+                .flatMap(recipe -> {
+                    recipe.setRank(recipe.getRank() + estimation);
+                    return recipeRepository.save(recipe);
+                });
+    }
+
 
 }

@@ -19,7 +19,7 @@ public class Statistic {
     private Long recipeId;
     @Column("value")
     private boolean value;
-
+    @Column("at")
     private Timestamp at;
 
 

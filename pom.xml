@@ -11,6 +11,7 @@
 	<groupId>blps.duo</groupId>
 	<artifactId>project</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
+	<packaging>jar</packaging>
 	<name>project</name>
 	<description>Lord of the Rings website with recipes</description>
 	<properties>
