@@ -29,7 +29,7 @@ public class PersonController {
         return personService.getPersonResponseById(id);
     }
 
-    @GetMapping("/all")
+    @GetMapping
     public Flux<PersonResponse> getAllPersons() {
         return personService.getAllPersonResponses();
     }
