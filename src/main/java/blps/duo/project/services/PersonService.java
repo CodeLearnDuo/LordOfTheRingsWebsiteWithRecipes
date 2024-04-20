@@ -33,7 +33,6 @@ public class PersonService implements
     private final PersonRepository personRepository;
     private final RaceService raceService;
     private final PasswordService passwordService;
-    private final ApiTokenService apiTokenService;
     private final TransactionalOperator requiredNewTransactionalOperator;
     private final TokenProvider tokenProvider;
 
