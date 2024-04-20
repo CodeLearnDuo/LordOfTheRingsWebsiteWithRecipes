@@ -2,15 +2,13 @@ package blps.duo.project.dto.responses;
 
 import java.util.List;
 
-public record RecipeResponse(
+public record AddRecipeResponse(
         Long id,
         String title,
         String description,
-        byte[] logo,
+        String logo,
         RaceResponse raceName,
         List<IngredientsResponse> ingredients,
         double rank
 ) {
-
 }
-

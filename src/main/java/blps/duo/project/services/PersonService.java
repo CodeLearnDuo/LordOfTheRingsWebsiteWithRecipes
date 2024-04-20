@@ -17,6 +17,7 @@ import org.springframework.security.core.userdetails.ReactiveUserDetailsService;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -32,6 +33,7 @@ public class PersonService implements
     private final PersonRepository personRepository;
     private final RaceService raceService;
     private final PasswordService passwordService;
+    private final TransactionalOperator requiredNewTransactionalOperator;
     private final TokenProvider tokenProvider;
 
     @Override
@@ -82,29 +84,31 @@ public class PersonService implements
     }
 
 
-    @Transactional
     public Mono<ApiToken> singUp(SingUpRequest singUpRequest) {
-        return personRepository
-                .existsByEmail(singUpRequest.email())
-                .filter(exists -> !exists)
-                .switchIfEmpty(Mono.error(new PersonAlreadyExistsException()))
-                .flatMap(exists -> raceService.getRaceByRaceName(singUpRequest.race()))
-                .switchIfEmpty(Mono.error(new RaceNotFoundException()))
-                .flatMap(race -> encodePasswordAndCreatePerson(singUpRequest, race))
-                .map(tokenProvider::generateToken)
-                .map(ApiToken::new);
+        return requiredNewTransactionalOperator.transactional(
+                personRepository
+                        .existsByEmail(singUpRequest.email())
+                        .filter(exists -> !exists)
+                        .switchIfEmpty(Mono.error(new PersonAlreadyExistsException()))
+                        .flatMap(exists -> raceService.getRaceByRaceName(singUpRequest.race()))
+                        .switchIfEmpty(Mono.error(new RaceNotFoundException()))
+                        .flatMap(race -> encodePasswordAndCreatePerson(singUpRequest, race))
+                        .map(tokenProvider::generateToken)
+                        .map(ApiToken::new)
+        );
     }
 
     private Mono<Person> encodePasswordAndCreatePerson(SingUpRequest signUpRequest, Race race) {
         return passwordService.passwordEncode(signUpRequest.password())
                 .flatMap(hashedPassword -> personRepository.save(
-                        new Person(
-                                signUpRequest.email(),
-                                signUpRequest.username(),
-                                hashedPassword,
-                                race.getId()
+                                new Person(
+                                        signUpRequest.email(),
+                                        signUpRequest.username(),
+                                        hashedPassword,
+                                        race.getId()
+                                )
                         )
-                ));
+                );
     }
 
 
@@ -123,7 +127,8 @@ public class PersonService implements
 
     @Transactional
     public Mono<Void> delete(Long personId, Mono<Person> requestOwnerMono, DeletePersonRequest deletePersonRequest) {
-        return requestOwnerMono
+        return requiredNewTransactionalOperator.transactional(
+                requestOwnerMono
                 .switchIfEmpty(Mono.error(new AuthorizationException()))
                 .flatMap(requestOwner -> getPersonByEmail(requestOwner.getEmail()))
                 .flatMap(requestOwner -> passwordService
@@ -131,7 +136,8 @@ public class PersonService implements
                         .filter(Boolean::booleanValue)
                         .switchIfEmpty(Mono.error(new AuthorizationException("Invalid password")))
                         .map(valid -> requestOwner))
-                .flatMap(requestOwner -> deletePersonIfAuthorized(personId, requestOwner));
+                .flatMap(requestOwner -> deletePersonIfAuthorized(personId, requestOwner))
+        );
     }
 
     private Mono<Void> deletePersonIfAuthorized(Long personId, Person requestOwner) {

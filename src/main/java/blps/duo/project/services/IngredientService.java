@@ -10,6 +10,7 @@ import blps.duo.project.repositories.RecipeIngredientRelationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -21,6 +22,7 @@ public class IngredientService {
 
     private final IngredientRepository ingredientRepository;
     private final RecipeIngredientRelationRepository recipeIngredientRelationRepository;
+    private final TransactionalOperator requiredRepeatableReadTransactionalOperator;
 
     public Flux<IngredientsResponse> getAllRecipesIngredients(Long recipeId) {
 
@@ -37,7 +39,8 @@ public class IngredientService {
     @Transactional
     public Flux<IngredientsResponse> saveAllIngredientsForRecipeId(Long recipeId, List<IngredientsRequest> ingredientsRequestList) {
 
-        return Flux.fromIterable(ingredientsRequestList)
+        return requiredRepeatableReadTransactionalOperator.transactional(
+                Flux.fromIterable(ingredientsRequestList)
                 .flatMap(ingredient -> ingredientRepository.existsByNameAndDescription(ingredient.name(), ingredient.description())
                         .flatMap(exist -> {
                             if (Boolean.TRUE.equals(exist)) {
@@ -48,7 +51,8 @@ public class IngredientService {
                         }))
                 .flatMap(ingredient -> recipeIngredientRelationRepository
                         .save(new RecipeIngredientRelation(recipeId, ingredient.getId()))
-                        .map(recipeIngredientRelation -> new IngredientsResponse(ingredient.getName(), ingredient.getDescription())));
+                        .map(recipeIngredientRelation -> new IngredientsResponse(ingredient.getName(), ingredient.getDescription())))
+        );
 
     }
 

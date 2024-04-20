@@ -2,6 +2,7 @@ package blps.duo.project.controllers;
 
 import blps.duo.project.dto.requests.AddRecipeRequest;
 import blps.duo.project.dto.requests.ScoreRequest;
+import blps.duo.project.dto.responses.AddRecipeResponse;
 import blps.duo.project.dto.responses.RecipeResponse;
 import blps.duo.project.dto.responses.ShortRecipeResponse;
 import blps.duo.project.model.Person;
@@ -38,7 +39,7 @@ public class RecipeController {
 
     //authorised
     @PostMapping
-    public Mono<RecipeResponse> addRecipe(@AuthenticationPrincipal Mono<Person> requestOwnerMono,
+    public Mono<AddRecipeResponse> addRecipe(@AuthenticationPrincipal Mono<Person> requestOwnerMono,
                                           @RequestBody @Valid AddRecipeRequest addRecipeRequest) {
         return recipeService.addRecipe(requestOwnerMono, addRecipeRequest);
     }
