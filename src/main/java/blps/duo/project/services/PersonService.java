@@ -115,7 +115,7 @@ public class PersonService implements
     public Mono<ApiToken> singIn(SingInRequest singInRequest) {
         return personRepository
                 .findByEmail(singInRequest.email())
-                .switchIfEmpty(Mono.error(new AuthenticationException()))
+                .switchIfEmpty(Mono.error(new AuthenticationException("Unknown email")))
                 .flatMap(person -> passwordService
                         .passwordAuthentication(person.getPassword(), singInRequest.password())
                         .filter(Boolean::booleanValue)

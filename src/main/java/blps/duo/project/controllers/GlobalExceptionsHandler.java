@@ -4,6 +4,7 @@ import blps.duo.project.dto.responses.ApiErrorResponse;
 import blps.duo.project.exceptions.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 public class GlobalExceptionsHandler {
 
     @ExceptionHandler(JwtAuthenticationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Mono<ApiErrorResponse> handleJwtAuthenticationException(JwtAuthenticationException ex, ServerWebExchange exchange) {
         return Mono.just(new ApiErrorResponse(
                 Timestamp.valueOf(LocalDateTime.now()),
@@ -26,6 +28,7 @@ public class GlobalExceptionsHandler {
     }
 
     @ExceptionHandler(AuthorizationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Mono<ApiErrorResponse> handleAuthorizationException(AuthorizationException ex, ServerWebExchange exchange) {
         return Mono.just(new ApiErrorResponse(
                 Timestamp.valueOf(LocalDateTime.now()),
@@ -37,6 +40,7 @@ public class GlobalExceptionsHandler {
     }
 
     @ExceptionHandler(AuthenticationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Mono<ApiErrorResponse> handleAuthenticationException(AuthenticationException ex, ServerWebExchange exchange) {
         return Mono.just(new ApiErrorResponse(
                 Timestamp.valueOf(LocalDateTime.now()),
@@ -48,6 +52,7 @@ public class GlobalExceptionsHandler {
     }
 
     @ExceptionHandler(NoSuchRecipeException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
     public Mono<ApiErrorResponse> handleNoSuchRecipeException(NoSuchRecipeException ex, ServerWebExchange exchange) {
         return Mono.just(new ApiErrorResponse(
                 Timestamp.valueOf(LocalDateTime.now()),
@@ -59,6 +64,7 @@ public class GlobalExceptionsHandler {
     }
 
     @ExceptionHandler(PersonAlreadyExistsException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Mono<ApiErrorResponse> handlePersonAlreadyExistsException(PersonAlreadyExistsException ex, ServerWebExchange exchange) {
         return Mono.just(new ApiErrorResponse(
                 Timestamp.valueOf(LocalDateTime.now()),
@@ -70,17 +76,19 @@ public class GlobalExceptionsHandler {
     }
 
     @ExceptionHandler(RaceNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
     public Mono<ApiErrorResponse> handleRaceNotFoundException(RaceNotFoundException ex, ServerWebExchange exchange) {
         return Mono.just(new ApiErrorResponse(
                 Timestamp.valueOf(LocalDateTime.now()),
                 exchange.getRequest().getPath().value(),
-                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.NOT_FOUND.value(),
                 ex.toString(),
                 "This race does not exist"
         ));
     }
 
     @ExceptionHandler(PersonNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
     public Mono<ApiErrorResponse> handlePersonNotFoundException(PersonNotFoundException ex, ServerWebExchange exchange) {
         return Mono.just(new ApiErrorResponse(
                 Timestamp.valueOf(LocalDateTime.now()),
@@ -90,10 +98,5 @@ public class GlobalExceptionsHandler {
                 "This person does not exist"
         ));
     }
-
-
-
-
-
 
 }

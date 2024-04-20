@@ -1,5 +1,6 @@
 package blps.duo.project.security;
 
+import blps.duo.project.exceptions.JwtAuthenticationException;
 import blps.duo.project.model.Person;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -70,7 +71,7 @@ public class JwtService implements TokenProvider {
                     .parseSignedClaims(jwt)
                     .getPayload();
         } catch (JwtException e) {
-            throw new JwtException("Invalid JWT\n" + e.getMessage());
+            throw new JwtAuthenticationException("Invalid JWT\n" + e.getMessage());
         }
     }
 
