@@ -1,14 +1,14 @@
 package blps.duo.project.services;
 
-import blps.duo.project.dto.ApiToken;
 import blps.duo.project.dto.requests.AddRecipeRequest;
 import blps.duo.project.dto.requests.ScoreRequest;
 import blps.duo.project.dto.responses.RaceResponse;
 import blps.duo.project.dto.responses.RecipeResponse;
 import blps.duo.project.dto.responses.ShortRecipeResponse;
 import blps.duo.project.exceptions.AuthorizationException;
+import blps.duo.project.exceptions.JwtAuthenticationException;
 import blps.duo.project.exceptions.NoSuchRecipeException;
-import blps.duo.project.model.Race;
+import blps.duo.project.model.Person;
 import blps.duo.project.model.RaceRelationship;
 import blps.duo.project.model.Recipe;
 import blps.duo.project.model.Statistic;
@@ -30,9 +30,9 @@ public class RecipeService {
     private final RecipeRepository recipeRepository;
     private final RaceService raceService;
     private final IngredientService ingredientService;
-    private final ApiTokenService apiTokenService;
     private final RaceRelationshipsService raceRelationshipsService;
     private final StatisticService statisticService;
+    private final PersonService personService;
 
     public Mono<RecipeResponse> getRecipeResponseById(Long recipeId) {
 
@@ -68,39 +68,40 @@ public class RecipeService {
                                                 recipe.getLogo(),
                                                 new RaceResponse(raceResponse.getName()),
                                                 recipe.getRank()
-                                        ))
+                                        )
+                                )
                 );
     }
 
     @Transactional
-    public Mono<RecipeResponse> addRecipe(ApiToken apiToken, AddRecipeRequest addRecipeRequest) {
-        return apiTokenService.getApiTokenOwner(apiToken)
+    public Mono<RecipeResponse> addRecipe(Mono<Person> requestOwnerMono, AddRecipeRequest addRecipeRequest) {
+        return requestOwnerMono
                 .switchIfEmpty(Mono.error(new AuthorizationException()))
-                .flatMap(person ->
-                        (raceService.getRaceById(person.getPersonRaceId())
-                                .map(Race::getName))
-                                .flatMap(raceService::getRaceByRaceName)
-                                .flatMap(race ->
-                                        recipeRepository.save(new Recipe(
-                                                        addRecipeRequest.title(),
-                                                        addRecipeRequest.description(),
-                                                        addRecipeRequest.logo(),
-                                                        race.getId()
-                                                )
-                                        ).flatMap(recipe -> ingredientService.saveAllIngredientsForRecipeId(recipe.getId(), addRecipeRequest.ingredients())
-                                                .collectList()
-                                                .flatMap(ingredientsResponseList ->
-                                                        Mono.just(new RecipeResponse(
-                                                                recipe.getId(),
-                                                                recipe.getTitle(),
-                                                                recipe.getDescription(),
-                                                                recipe.getLogo(),
-                                                                new RaceResponse(race.getName()),
-                                                                ingredientsResponseList,
-                                                                recipe.getRank()
-                                                        ))
-
-                                                )))
+                .flatMap(requestOwner -> raceService.existsRaceById(requestOwner.getPersonRaceId())
+                        .filter(Boolean::booleanValue)
+                        .switchIfEmpty(Mono.error(new JwtAuthenticationException("Invalid race in jwt")))
+                        .map(exists -> requestOwner))
+                .flatMap(requestOwner -> recipeRepository.save(new Recipe(
+                                        addRecipeRequest.title(),
+                                        addRecipeRequest.description(),
+                                        addRecipeRequest.logo(),
+                                        requestOwner.getPersonRaceId()
+                                )
+                        ).flatMap(recipe -> ingredientService
+                                .saveAllIngredientsForRecipeId(recipe.getId(), addRecipeRequest.ingredients())
+                                .collectList()
+                                .map(ingredientsResponseList ->
+                                        new RecipeResponse(
+                                                recipe.getId(),
+                                                recipe.getTitle(),
+                                                recipe.getDescription(),
+                                                recipe.getLogo(),
+                                                new RaceResponse(requestOwner.getName()),
+                                                ingredientsResponseList,
+                                                recipe.getRank()
+                                        )
+                                )
+                        )
                 );
     }
 
@@ -128,37 +129,47 @@ public class RecipeService {
     }
 
     @Transactional
-    public Mono<RecipeResponse> estimate(ApiToken apiToken, ScoreRequest scoreRequest) {
+    public Mono<RecipeResponse> estimate(Mono<Person> requestOwnerMono, ScoreRequest scoreRequest) {
 
         Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
-        return apiTokenService.getApiTokenOwner(apiToken)
+        record OwnerWithRaceRelationship(Person owner, RaceRelationship relationship) {
+        }
+
+        return requestOwnerMono
                 .switchIfEmpty(Mono.error(new AuthorizationException()))
-                .flatMap(person -> raceRelationshipsService.findRelationshipByIds(apiToken.apiToken(), scoreRequest.recipeId()))
-                .flatMap(raceRelationship ->
-                        statisticService.findEstimate(apiToken.apiToken(), scoreRequest.recipeId())
-                                .flatMap(foundEstimation -> {
-                                    if (foundEstimation.isValue() == scoreRequest.value()) {
-                                        return updateRankByRemovingEstimate(apiToken, scoreRequest, raceRelationship, foundEstimation)
-                                                .flatMap(recipe -> statisticService.removeEstimate(apiToken.apiToken(), scoreRequest.recipeId())
-                                                        .thenReturn(recipe));
-                                    } else {
-                                        return updateRankByChangingEstimate(apiToken, scoreRequest, raceRelationship, foundEstimation)
-                                                .flatMap(recipe -> statisticService.collectData(apiToken.apiToken(), scoreRequest.recipeId(), scoreRequest.value(), timestamp)
-                                                        .thenReturn(recipe));
-                                    }
-                                })
-                                .switchIfEmpty(
-                                        updateRankByAddingEstimate(apiToken, scoreRequest, raceRelationship)
-                                                .flatMap(recipe -> statisticService.collectData(apiToken.apiToken(), scoreRequest.recipeId(), scoreRequest.value(), timestamp)
-                                                        .thenReturn(recipe))
-                                )
+                .flatMap(requestOwner -> personService.getPersonByEmail(requestOwner.getEmail()))
+                .flatMap(requestOwner ->
+                        raceRelationshipsService.findRelationshipByIds(requestOwner.getId(), scoreRequest.recipeId())
+                                .map(relationship -> new OwnerWithRaceRelationship(requestOwner, relationship))
+                )
+                .flatMap(ownerWithRaceRelationship -> {
+                            var foundEstimationMono = statisticService.findEstimate(ownerWithRaceRelationship.owner.getId(), scoreRequest.recipeId());
+                            return updateRank(
+                                    ownerWithRaceRelationship.owner.getId(),
+                                    scoreRequest,
+                                    ownerWithRaceRelationship.relationship,
+                                    foundEstimationMono,
+                                    timestamp
+                            );
+                        }
                 )
                 .flatMap(recipe -> getRecipeResponseById(recipe.getId()));
     }
 
+    private Mono<Recipe> updateRank(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Mono<Statistic> foundEstimationMono, Timestamp timestamp) {
+        return foundEstimationMono
+                .flatMap(foundEstimation -> {
+                    if (foundEstimation.isValue() == scoreRequest.value()) {
+                        return updateRankByRemovingEstimate(ownerId, scoreRequest, raceRelationship, foundEstimation);
+                    } else {
+                        return updateRankByChangingEstimate(ownerId, scoreRequest, raceRelationship, foundEstimation, timestamp);
+                    }
+                })
+                .switchIfEmpty(updateRankByAddingEstimate(ownerId, scoreRequest, raceRelationship, timestamp));
+    }
 
-    private Mono<Recipe> updateRankByRemovingEstimate(ApiToken apiToken, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Statistic foundEstimation) {
+    private Mono<Recipe> updateRankByRemovingEstimate(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Statistic foundEstimation) {
 
         double estimation = foundEstimation.isValue() ? raceRelationship.getRelationshipCoefficient() : -1 * (1 - raceRelationship.getRelationshipCoefficient());
 
@@ -167,10 +178,12 @@ public class RecipeService {
                 .flatMap(recipe -> {
                     recipe.setRank(recipe.getRank() - estimation);
                     return recipeRepository.save(recipe);
-                });
+                })
+                .flatMap(recipe -> statisticService.removeEstimate(ownerId, scoreRequest.recipeId())
+                        .thenReturn(recipe));
     }
 
-    private Mono<Recipe> updateRankByChangingEstimate(ApiToken apiToken, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Statistic foundEstimation) {
+    private Mono<Recipe> updateRankByChangingEstimate(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Statistic foundEstimation, Timestamp timestamp) {
 
         double currentEstimation = scoreRequest.value() ? raceRelationship.getRelationshipCoefficient() : -1 * (1 - raceRelationship.getRelationshipCoefficient());
         double previousEstimation = foundEstimation.isValue() ? raceRelationship.getRelationshipCoefficient() : -1 * (1 - raceRelationship.getRelationshipCoefficient());
@@ -180,10 +193,12 @@ public class RecipeService {
                 .flatMap(recipe -> {
                     recipe.setRank(recipe.getRank() - previousEstimation + currentEstimation);
                     return recipeRepository.save(recipe);
-                });
+                })
+                .flatMap(recipe -> statisticService.collectData(ownerId, scoreRequest.recipeId(), scoreRequest.value(), timestamp)
+                        .thenReturn(recipe));
     }
 
-    private Mono<Recipe> updateRankByAddingEstimate(ApiToken apiToken, ScoreRequest scoreRequest, RaceRelationship raceRelationship) {
+    private Mono<Recipe> updateRankByAddingEstimate(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Timestamp timestamp) {
 
         double estimation = scoreRequest.value() ? raceRelationship.getRelationshipCoefficient() : -1 * (1 - raceRelationship.getRelationshipCoefficient());
 
@@ -192,7 +207,9 @@ public class RecipeService {
                 .flatMap(recipe -> {
                     recipe.setRank(recipe.getRank() + estimation);
                     return recipeRepository.save(recipe);
-                });
+                })
+                .flatMap(recipe -> statisticService.collectData(ownerId, scoreRequest.recipeId(), scoreRequest.value(), timestamp)
+                        .thenReturn(recipe));
     }
 
 
