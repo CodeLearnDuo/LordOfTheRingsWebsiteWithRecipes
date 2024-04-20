@@ -34,6 +34,7 @@ public class PersonService implements
     private final RaceService raceService;
     private final PasswordService passwordService;
     private final TransactionalOperator requiredNewTransactionalOperator;
+    private final TransactionalOperator requiredRepeatableReadTransactionalOperator;
     private final TokenProvider tokenProvider;
 
     @Override
@@ -44,14 +45,15 @@ public class PersonService implements
     }
 
     @Override
-    @Transactional
     public Mono<UserDetails> updatePassword(UserDetails user, String newPassword) {
-        return personRepository
-                .findByEmail(user.getUsername())
-                .flatMap(p -> {
-                    p.setPassword(newPassword);
-                    return personRepository.save(p);
-                });
+        return requiredNewTransactionalOperator.transactional(
+                personRepository
+                        .findByEmail(user.getUsername())
+                        .flatMap(p -> {
+                            p.setPassword(newPassword);
+                            return personRepository.save(p);
+                        })
+        );
     }
 
     public Mono<PersonResponse> getPersonResponseById(Long id) {
@@ -99,16 +101,18 @@ public class PersonService implements
     }
 
     private Mono<Person> encodePasswordAndCreatePerson(SingUpRequest signUpRequest, Race race) {
-        return passwordService.passwordEncode(signUpRequest.password())
-                .flatMap(hashedPassword -> personRepository.save(
-                                new Person(
-                                        signUpRequest.email(),
-                                        signUpRequest.username(),
-                                        hashedPassword,
-                                        race.getId()
+        return requiredRepeatableReadTransactionalOperator.transactional(
+                passwordService.passwordEncode(signUpRequest.password())
+                        .flatMap(hashedPassword -> personRepository.save(
+                                        new Person(
+                                                signUpRequest.email(),
+                                                signUpRequest.username(),
+                                                hashedPassword,
+                                                race.getId()
+                                        )
                                 )
                         )
-                );
+        );
     }
 
 
@@ -129,14 +133,14 @@ public class PersonService implements
     public Mono<Void> delete(Long personId, Mono<Person> requestOwnerMono, DeletePersonRequest deletePersonRequest) {
         return requiredNewTransactionalOperator.transactional(
                 requestOwnerMono
-                .switchIfEmpty(Mono.error(new AuthorizationException()))
-                .flatMap(requestOwner -> getPersonByEmail(requestOwner.getEmail()))
-                .flatMap(requestOwner -> passwordService
-                        .passwordAuthentication(requestOwner.getPassword(), deletePersonRequest.password())
-                        .filter(Boolean::booleanValue)
-                        .switchIfEmpty(Mono.error(new AuthorizationException("Invalid password")))
-                        .map(valid -> requestOwner))
-                .flatMap(requestOwner -> deletePersonIfAuthorized(personId, requestOwner))
+                        .switchIfEmpty(Mono.error(new AuthorizationException()))
+                        .flatMap(requestOwner -> getPersonByEmail(requestOwner.getEmail()))
+                        .flatMap(requestOwner -> passwordService
+                                .passwordAuthentication(requestOwner.getPassword(), deletePersonRequest.password())
+                                .filter(Boolean::booleanValue)
+                                .switchIfEmpty(Mono.error(new AuthorizationException("Invalid password")))
+                                .map(valid -> requestOwner))
+                        .flatMap(requestOwner -> deletePersonIfAuthorized(personId, requestOwner))
         );
     }
 
@@ -151,15 +155,17 @@ public class PersonService implements
     }
 
     private Mono<Void> deleteForLeader(Long personId, Person requestOwner) {
-        return getPersonById(personId)
-                .flatMap(person -> {
-                            if (Objects.equals(person.getPersonRaceId(), requestOwner.getPersonRaceId())) {
-                                return personRepository.delete(person);
-                            } else {
-                                return Mono.error(new AuthorizationException("Unauthorized to delete this person"));
-                            }
-                        }
-                );
+        return requiredNewTransactionalOperator.transactional(
+                getPersonById(personId)
+                        .flatMap(person -> {
+                                    if (Objects.equals(person.getPersonRaceId(), requestOwner.getPersonRaceId())) {
+                                        return personRepository.delete(person);
+                                    } else {
+                                        return Mono.error(new AuthorizationException("Unauthorized to delete this person"));
+                                    }
+                                }
+                        )
+        );
     }
 
     public Mono<Person> getPersonById(Long personId) {

@@ -170,15 +170,17 @@ public class RecipeService {
     }
 
     private Mono<Recipe> updateRank(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Mono<Statistic> foundEstimationMono, Timestamp timestamp) {
-        return foundEstimationMono
-                .flatMap(foundEstimation -> {
-                    if (foundEstimation.isValue() == scoreRequest.value()) {
-                        return updateRankByRemovingEstimate(ownerId, scoreRequest, raceRelationship, foundEstimation);
-                    } else {
-                        return updateRankByChangingEstimate(ownerId, scoreRequest, raceRelationship, foundEstimation, timestamp);
-                    }
-                })
-                .switchIfEmpty(updateRankByAddingEstimate(ownerId, scoreRequest, raceRelationship, timestamp));
+        return requiredTransactionalOperator.transactional(
+                foundEstimationMono
+                        .flatMap(foundEstimation -> {
+                            if (foundEstimation.isValue() == scoreRequest.value()) {
+                                return updateRankByRemovingEstimate(ownerId, scoreRequest, raceRelationship, foundEstimation);
+                            } else {
+                                return updateRankByChangingEstimate(ownerId, scoreRequest, raceRelationship, foundEstimation, timestamp);
+                            }
+                        })
+                        .switchIfEmpty(updateRankByAddingEstimate(ownerId, scoreRequest, raceRelationship, timestamp))
+        );
     }
 
     private Mono<Recipe> updateRankByRemovingEstimate(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Statistic foundEstimation) {
