@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
 import java.util.List;
 
 @Service
@@ -42,7 +43,7 @@ public class IngredientService {
                 Flux.fromIterable(ingredientsRequestList)
                 .flatMap(ingredient -> ingredientRepository.existsByNameAndDescription(ingredient.name(), ingredient.description())
                         .flatMap(exist -> {
-                            if (exist) {
+                            if (Boolean.TRUE.equals(exist)) {
                                 return ingredientRepository.findByNameAndDescription(ingredient.name(), ingredient.description());
                             } else {
                                 return ingredientRepository.save(new Ingredient(ingredient.name(), ingredient.description()));

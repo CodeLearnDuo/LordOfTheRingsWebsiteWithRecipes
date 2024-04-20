@@ -1,6 +1,6 @@
 package blps.duo.project.services;
 
-import blps.duo.project.dto.*;
+import blps.duo.project.dto.ApiToken;
 import blps.duo.project.dto.requests.DeletePersonRequest;
 import blps.duo.project.dto.requests.SingInRequest;
 import blps.duo.project.dto.requests.SingUpRequest;
@@ -8,8 +8,13 @@ import blps.duo.project.dto.responses.PersonResponse;
 import blps.duo.project.dto.responses.RaceResponse;
 import blps.duo.project.exceptions.*;
 import blps.duo.project.model.Person;
+import blps.duo.project.model.Race;
 import blps.duo.project.repositories.PersonRepository;
+import blps.duo.project.security.TokenProvider;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.userdetails.ReactiveUserDetailsPasswordService;
+import org.springframework.security.core.userdetails.ReactiveUserDetailsService;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.reactive.TransactionalOperator;
@@ -20,7 +25,9 @@ import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
-public class PersonService {
+public class PersonService implements
+        ReactiveUserDetailsService,
+        ReactiveUserDetailsPasswordService {
 
 
     private final PersonRepository personRepository;
@@ -28,6 +35,25 @@ public class PersonService {
     private final PasswordService passwordService;
     private final ApiTokenService apiTokenService;
     private final TransactionalOperator requiredNewTransactionalOperator;
+    private final TokenProvider tokenProvider;
+
+    @Override
+    public Mono<UserDetails> findByUsername(String username) {
+        return personRepository
+                .findByEmail(username)
+                .cast(UserDetails.class);
+    }
+
+    @Override
+    @Transactional
+    public Mono<UserDetails> updatePassword(UserDetails user, String newPassword) {
+        return personRepository
+                .findByEmail(user.getUsername())
+                .flatMap(p -> {
+                    p.setPassword(newPassword);
+                    return personRepository.save(p);
+                });
+    }
 
     public Mono<PersonResponse> getPersonResponseById(Long id) {
         return personRepository
@@ -37,7 +63,7 @@ public class PersonService {
                         raceService.getRaceById(p.getPersonRaceId())
                                 .map(race -> new PersonResponse(
                                         p.getId(),
-                                        p.getUsername(),
+                                        p.getName(),
                                         new RaceResponse(race.getName()),
                                         p.isALeader())
                                 )
@@ -51,7 +77,7 @@ public class PersonService {
                         raceService.getRaceById(p.getPersonRaceId())
                                 .map(race -> new PersonResponse(
                                         p.getId(),
-                                        p.getUsername(),
+                                        p.getName(),
                                         new RaceResponse(race.getName()),
                                         p.isALeader())
                                 )
@@ -63,72 +89,87 @@ public class PersonService {
         return requiredNewTransactionalOperator.transactional(
                 personRepository
                         .existsByEmail(singUpRequest.email())
-                        .flatMap(exists -> {
-                            if (Boolean.TRUE.equals(exists)) {
-                                return Mono.error(new PersonAlreadyExistsException());
-                            } else {
-                                return raceService
-                                        .getRaceByRaceName(singUpRequest.race())
-                                        .switchIfEmpty(Mono.error(new RaceNotFoundException()))
-                                        .flatMap(race ->
-                                                Mono.fromFuture(passwordService.passwordEncode(singUpRequest.password()))
-                                                        .flatMap(hashedPassword ->
-                                                                personRepository.save(
-                                                                        new Person(
-                                                                                singUpRequest.email(),
-                                                                                singUpRequest.username(),
-                                                                                hashedPassword,
-                                                                                race.getId()
-                                                                        )
-                                                                )).map(person -> new ApiToken(person.getId()))
-                                        );
-                            }
-                        })
+                        .filter(exists -> !exists)
+                        .switchIfEmpty(Mono.error(new PersonAlreadyExistsException()))
+                        .flatMap(exists -> raceService.getRaceByRaceName(singUpRequest.race()))
+                        .switchIfEmpty(Mono.error(new RaceNotFoundException()))
+                        .flatMap(race -> encodePasswordAndCreatePerson(singUpRequest, race))
+                        .map(tokenProvider::generateToken)
+                        .map(ApiToken::new)
         );
     }
+
+    private Mono<Person> encodePasswordAndCreatePerson(SingUpRequest signUpRequest, Race race) {
+        return passwordService.passwordEncode(signUpRequest.password())
+                .flatMap(hashedPassword -> personRepository.save(
+                                new Person(
+                                        signUpRequest.email(),
+                                        signUpRequest.username(),
+                                        hashedPassword,
+                                        race.getId()
+                                )
+                        )
+                );
+    }
+
 
     public Mono<ApiToken> singIn(SingInRequest singInRequest) {
         return personRepository
                 .findByEmail(singInRequest.email())
                 .switchIfEmpty(Mono.error(new AuthenticationException()))
-                .flatMap(person -> Mono.fromFuture(
-                                        passwordService.passwordAuthentication(person.getPassword(), singInRequest.password())
-                                )
-                        .flatMap(solution -> {
-                            if (Boolean.TRUE.equals(solution)) {
-                                return Mono.just(new ApiToken(person.getId()));
-                            } else {
-                                return Mono.error(new AuthenticationException());
-                            }
-                        })
+                .flatMap(person -> passwordService
+                        .passwordAuthentication(person.getPassword(), singInRequest.password())
+                        .filter(Boolean::booleanValue)
+                        .switchIfEmpty(Mono.error(new AuthorizationException("Invalid password")))
+                        .map(valid -> new ApiToken(tokenProvider.generateToken(person))
+                        )
                 );
     }
 
-
-    public Mono<Void> delete(Long personId, ApiToken apiToken, DeletePersonRequest deletePersonRequest) {
+    @Transactional
+    public Mono<Void> delete(Long personId, Mono<Person> requestOwnerMono, DeletePersonRequest deletePersonRequest) {
         return requiredNewTransactionalOperator.transactional(
-                apiTokenService.getApiTokenOwner(apiToken)
-                        .switchIfEmpty(Mono.error(new AuthorizationException()))
-                        .flatMap(person -> {
-                            if (!Objects.equals(personId, person.getId())) {
-                                return Mono.error(new AuthorizationException());
-                            } else {
-                                return Mono.fromFuture(
-                                        passwordService.passwordAuthentication(person.getPassword(), deletePersonRequest.password())
-                                ).flatMap(solution -> {
-                                    if (Boolean.TRUE.equals(solution)) {
-                                        return personRepository.deleteById(personId);
-                                    } else {
-                                        return Mono.error(new AuthorizationException());
-                                    }
-                                });
-                            }
-                        })
+                requestOwnerMono
+                .switchIfEmpty(Mono.error(new AuthorizationException()))
+                .flatMap(requestOwner -> getPersonByEmail(requestOwner.getEmail()))
+                .flatMap(requestOwner -> passwordService
+                        .passwordAuthentication(requestOwner.getPassword(), deletePersonRequest.password())
+                        .filter(Boolean::booleanValue)
+                        .switchIfEmpty(Mono.error(new AuthorizationException("Invalid password")))
+                        .map(valid -> requestOwner))
+                .flatMap(requestOwner -> deletePersonIfAuthorized(personId, requestOwner))
         );
+    }
+
+    private Mono<Void> deletePersonIfAuthorized(Long personId, Person requestOwner) {
+        if (requestOwner.isALeader()) {
+            return deleteForLeader(personId, requestOwner);
+        } else if (Objects.equals(personId, requestOwner.getId())) {
+            return personRepository.deleteById(personId);
+        } else {
+            return Mono.error(new AuthorizationException());
+        }
+    }
+
+    private Mono<Void> deleteForLeader(Long personId, Person requestOwner) {
+        return getPersonById(personId)
+                .flatMap(person -> {
+                            if (Objects.equals(person.getPersonRaceId(), requestOwner.getPersonRaceId())) {
+                                return personRepository.delete(person);
+                            } else {
+                                return Mono.error(new AuthorizationException("Unauthorized to delete this person"));
+                            }
+                        }
+                );
     }
 
     public Mono<Person> getPersonById(Long personId) {
         return personRepository.findById(personId)
+                .switchIfEmpty(Mono.error(new PersonNotFoundException()));
+    }
+
+    public Mono<Person> getPersonByEmail(String email) {
+        return personRepository.findByEmail(email)
                 .switchIfEmpty(Mono.error(new PersonNotFoundException()));
     }
 }

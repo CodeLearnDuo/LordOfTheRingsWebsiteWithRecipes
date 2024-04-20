@@ -1,6 +1,5 @@
 package blps.duo.project.configuration;
 
-import blps.duo.project.converters.StringToApiTokenConverter;
 import blps.duo.project.converters.StringToFindRecipeRequest;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.format.FormatterRegistry;
@@ -11,7 +10,6 @@ public class WebConfig implements WebFluxConfigurer {
 
     @Override
     public void addFormatters(FormatterRegistry registry) {
-        registry.addConverter(new StringToApiTokenConverter());
         registry.addConverter(new StringToFindRecipeRequest());
     }
 }
