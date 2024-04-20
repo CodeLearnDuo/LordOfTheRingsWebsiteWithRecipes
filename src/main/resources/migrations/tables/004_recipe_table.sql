@@ -6,7 +6,7 @@ create table recipe
     id      bigserial unique not null,
     title       text          not null,
     description text          not null,
-    logo        bytea,
+    logo        text,
     race_id bigint           not null,
     rank        numeric default 0,
     primary key (id)

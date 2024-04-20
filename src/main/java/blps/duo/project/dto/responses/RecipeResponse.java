@@ -11,4 +11,6 @@ public record RecipeResponse(
         List<IngredientsResponse> ingredients,
         double rank
 ) {
+
 }
+

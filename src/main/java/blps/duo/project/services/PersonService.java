@@ -12,6 +12,7 @@ import blps.duo.project.repositories.PersonRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -26,6 +27,7 @@ public class PersonService {
     private final RaceService raceService;
     private final PasswordService passwordService;
     private final ApiTokenService apiTokenService;
+    private final TransactionalOperator requiredNewTransactionalOperator;
 
     public Mono<PersonResponse> getPersonResponseById(Long id) {
         return personRepository
@@ -56,31 +58,33 @@ public class PersonService {
                 );
     }
 
-    @Transactional
+
     public Mono<ApiToken> singUp(SingUpRequest singUpRequest) {
-        return personRepository
-                .existsByEmail(singUpRequest.email())
-                .flatMap(exists -> {
-                    if (Boolean.TRUE.equals(exists)) {
-                        return Mono.error(new PersonAlreadyExistsException());
-                    } else {
-                        return raceService
-                                .getRaceByRaceName(singUpRequest.race())
-                                .switchIfEmpty(Mono.error(new RaceNotFoundException()))
-                                .flatMap(race ->
-                                        Mono.fromFuture(passwordService.passwordEncode(singUpRequest.password()))
-                                                .flatMap(hashedPassword ->
-                                                        personRepository.save(
-                                                                new Person(
-                                                                        singUpRequest.email(),
-                                                                        singUpRequest.username(),
-                                                                        hashedPassword,
-                                                                        race.getId()
-                                                                )
-                                                        )).map(person -> new ApiToken(person.getId()))
-                                );
-                    }
-                });
+        return requiredNewTransactionalOperator.transactional(
+                personRepository
+                        .existsByEmail(singUpRequest.email())
+                        .flatMap(exists -> {
+                            if (Boolean.TRUE.equals(exists)) {
+                                return Mono.error(new PersonAlreadyExistsException());
+                            } else {
+                                return raceService
+                                        .getRaceByRaceName(singUpRequest.race())
+                                        .switchIfEmpty(Mono.error(new RaceNotFoundException()))
+                                        .flatMap(race ->
+                                                Mono.fromFuture(passwordService.passwordEncode(singUpRequest.password()))
+                                                        .flatMap(hashedPassword ->
+                                                                personRepository.save(
+                                                                        new Person(
+                                                                                singUpRequest.email(),
+                                                                                singUpRequest.username(),
+                                                                                hashedPassword,
+                                                                                race.getId()
+                                                                        )
+                                                                )).map(person -> new ApiToken(person.getId()))
+                                        );
+                            }
+                        })
+        );
     }
 
     public Mono<ApiToken> singIn(SingInRequest singInRequest) {
@@ -100,25 +104,27 @@ public class PersonService {
                 );
     }
 
-    @Transactional
+
     public Mono<Void> delete(Long personId, ApiToken apiToken, DeletePersonRequest deletePersonRequest) {
-        return apiTokenService.getApiTokenOwner(apiToken)
-                .switchIfEmpty(Mono.error(new AuthorizationException()))
-                .flatMap(person -> {
-                    if (!Objects.equals(personId, person.getId())) {
-                        return Mono.error(new AuthorizationException());
-                    } else {
-                        return Mono.fromFuture(
-                                passwordService.passwordAuthentication(person.getPassword(), deletePersonRequest.password())
-                        ).flatMap(solution -> {
-                            if (Boolean.TRUE.equals(solution)) {
-                                return personRepository.deleteById(personId);
-                            } else {
+        return requiredNewTransactionalOperator.transactional(
+                apiTokenService.getApiTokenOwner(apiToken)
+                        .switchIfEmpty(Mono.error(new AuthorizationException()))
+                        .flatMap(person -> {
+                            if (!Objects.equals(personId, person.getId())) {
                                 return Mono.error(new AuthorizationException());
+                            } else {
+                                return Mono.fromFuture(
+                                        passwordService.passwordAuthentication(person.getPassword(), deletePersonRequest.password())
+                                ).flatMap(solution -> {
+                                    if (Boolean.TRUE.equals(solution)) {
+                                        return personRepository.deleteById(personId);
+                                    } else {
+                                        return Mono.error(new AuthorizationException());
+                                    }
+                                });
                             }
-                        });
-                    }
-                });
+                        })
+        );
     }
 
     public Mono<Person> getPersonById(Long personId) {

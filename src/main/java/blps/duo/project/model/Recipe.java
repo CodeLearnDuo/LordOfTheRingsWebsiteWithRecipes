@@ -13,12 +13,12 @@ public class Recipe {
     private Long id;
     private String title;
     private String description;
-    private byte[] logo;
+    private String logo;
     @Column("race_id")
     private Long raceId;
     private double rank;
 
-    public Recipe(String title, String description, byte[] logo, Long raceId) {
+    public Recipe(String title, String description, String logo, Long raceId) {
         this.title = title;
         this.description = description;
         this.logo = logo;

@@ -1,7 +1,5 @@
 package blps.duo.project.dto.responses;
 
-import blps.duo.project.dto.responses.RaceResponse;
-
 import java.util.Arrays;
 import java.util.Objects;
 
