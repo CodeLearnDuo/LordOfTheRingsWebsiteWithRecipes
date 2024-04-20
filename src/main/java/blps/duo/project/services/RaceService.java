@@ -23,4 +23,9 @@ public class RaceService {
         return raceRepository.findRaceByName(raceName)
                 .switchIfEmpty(Mono.error(new RaceNotFoundException()));
     }
+
+    public Mono<Boolean> existsRaceById(Long id) {
+        return raceRepository.existsById(id);
+    }
+
 }

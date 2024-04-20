@@ -14,6 +14,17 @@ import java.time.LocalDateTime;
 @RestControllerAdvice
 public class GlobalExceptionsHandler {
 
+    @ExceptionHandler(JwtAuthenticationException.class)
+    public Mono<ApiErrorResponse> handleJwtAuthenticationException(JwtAuthenticationException ex, ServerWebExchange exchange) {
+        return Mono.just(new ApiErrorResponse(
+                Timestamp.valueOf(LocalDateTime.now()),
+                exchange.getRequest().getPath().value(),
+                HttpStatus.BAD_REQUEST.value(),
+                ex.toString(),
+                "Invalid jwt"
+        ));
+    }
+
     @ExceptionHandler(AuthorizationException.class)
     public Mono<ApiErrorResponse> handleAuthorizationException(AuthorizationException ex, ServerWebExchange exchange) {
         return Mono.just(new ApiErrorResponse(
