@@ -8,7 +8,9 @@ import blps.duo.project.dto.responses.ShortRecipeResponse;
 import blps.duo.project.model.Person;
 import blps.duo.project.services.RecipeService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
@@ -19,6 +21,7 @@ import javax.validation.Valid;
 @RestController
 @RequestMapping("/api/recipes")
 @RequiredArgsConstructor
+@Slf4j
 public class RecipeController {
 
     private final RecipeService recipeService;
@@ -38,10 +41,13 @@ public class RecipeController {
     }
 
     //authorised
-    @PostMapping
+    @PostMapping(consumes = {"multipart/form-data"})
     public Mono<AddRecipeResponse> addRecipe(@AuthenticationPrincipal Mono<Person> requestOwnerMono,
-                                          @RequestBody @Valid AddRecipeRequest addRecipeRequest) {
-        return recipeService.addRecipe(requestOwnerMono, addRecipeRequest);
+                                             @RequestPart("recipe") @Valid AddRecipeRequest addRecipeRequest,
+                                             @RequestPart("logo") Mono<FilePart> logoFileMono) {
+
+        return recipeService.addRecipe(requestOwnerMono, addRecipeRequest, logoFileMono);
+
     }
 
     //authorised

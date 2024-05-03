@@ -14,6 +14,6 @@ public class Logo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private final String id;
-    private final byte[] image;
+    private final String imageUrl;
 
 }

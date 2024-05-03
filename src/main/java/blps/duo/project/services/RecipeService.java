@@ -13,17 +13,23 @@ import blps.duo.project.model.*;
 import blps.duo.project.repositories.RecipeRepository;
 import blps.duo.project.repositories.redis.RedisRepositoryImpl;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.net.URI;
 import java.sql.Timestamp;
-import java.util.UUID;
+import java.util.Collections;
 import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class RecipeService {
 
     private final RecipeRepository recipeRepository;
@@ -36,6 +42,7 @@ public class RecipeService {
     private final TransactionalOperator requiredNewTransactionalOperator;
     private final TransactionalOperator requiresNewReadCommitedTransactionalOperator;
     private final RedisRepositoryImpl redisRepository;
+    private final MinioService minioService;
 
     public Mono<RecipeResponse> getRecipeResponseById(Long recipeId) {
         return recipeRepository
@@ -47,20 +54,32 @@ public class RecipeService {
                                         ingredientService.getAllRecipesIngredients(recipeId)
                                                 .collectList()
                                                 .flatMap(ingredients ->
-                                                        redisRepository.findLogo(recipe.getLogo())
-                                                                .defaultIfEmpty(new Logo("", new byte[0]))
-                                                                .map(logo ->
-                                                                        new RecipeResponse(
-                                                                                recipe.getId(),
-                                                                                recipe.getTitle(),
-                                                                                recipe.getDescription(),
-                                                                                logo.getImage(),
-                                                                                new RaceResponse(raceResponse.getName()),
-                                                                                ingredients,
-                                                                                recipe.getRank()
-                                                                        )
-                                                                )
-                                                ))
+                                                        minioService.downloadFile(extractFileNameFromUrl(recipe.getLogoUrl()))
+                                                                .collectList()
+                                                                .defaultIfEmpty(Collections.emptyList())
+                                                                .map(dataList -> {
+                                                                    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                                                                    dataList.forEach(buffer -> {
+                                                                        byte[] bytes = new byte[buffer.remaining()];
+                                                                        buffer.get(bytes);
+                                                                        try {
+                                                                            outputStream.write(bytes);
+                                                                        } catch (IOException e) {
+                                                                            throw new RuntimeException(e);
+                                                                        }
+                                                                    });
+                                                                    return new RecipeResponse(
+                                                                            recipe.getId(),
+                                                                            recipe.getTitle(),
+                                                                            recipe.getDescription(),
+                                                                            outputStream.toByteArray(),
+                                                                            new RaceResponse(raceResponse.getName()),
+                                                                            ingredients,
+                                                                            recipe.getRank()
+                                                                    );
+                                                                })
+                                                )
+                                )
                 );
     }
 
@@ -69,53 +88,69 @@ public class RecipeService {
                 .flatMap(recipe ->
                         raceService.getRaceById(recipe.getRaceId())
                                 .flatMap(raceResponse ->
-                                        redisRepository.findLogo(recipe.getLogo())
-                                                .defaultIfEmpty(new Logo("", new byte[0]))
-                                                .map(logo -> new ShortRecipeResponse(
-                                                        recipe.getId(),
-                                                        recipe.getTitle(),
-                                                        logo.getImage(),
-                                                        new RaceResponse(raceResponse.getName()),
-                                                        recipe.getRank()
-                                                )))
+                                        minioService.downloadFile(extractFileNameFromUrl(recipe.getLogoUrl()))
+                                                .collectList()
+                                                .defaultIfEmpty(Collections.emptyList())
+                                                .map(dataList -> {
+                                                    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                                                    dataList.forEach(buffer -> {
+                                                        byte[] bytes = new byte[buffer.remaining()];
+                                                        buffer.get(bytes);
+                                                        try {
+                                                            outputStream.write(bytes);
+                                                        } catch (IOException e) {
+                                                            throw new RuntimeException(e);
+                                                        }
+                                                    });
+                                                    return new ShortRecipeResponse(
+                                                            recipe.getId(),
+                                                            recipe.getTitle(),
+                                                            outputStream.toByteArray(),
+                                                            new RaceResponse(raceResponse.getName()),
+                                                            recipe.getRank()
+                                                    );
+                                                })
+                                )
                 );
     }
 
-    public Mono<AddRecipeResponse> addRecipe(Mono<Person> requestOwnerMono, AddRecipeRequest addRecipeRequest) {
-        return requiresNewReadCommitedTransactionalOperator.transactional(
-                requestOwnerMono
-                        .switchIfEmpty(Mono.error(new AuthorizationException()))
-                        .flatMap(requestOwner -> raceService.existsRaceById(requestOwner.getPersonRaceId())
-                                .filter(Boolean::booleanValue)
-                                .switchIfEmpty(Mono.error(new JwtAuthenticationException("Invalid race in jwt")))
-                                .map(exists -> requestOwner))
-                        .flatMap(requestOwner -> {
-                            String logoId = UUID.randomUUID().toString();
-                            redisRepository.addLogo(new Logo(logoId, addRecipeRequest.logo()));
-
-                            return recipeRepository.save(new Recipe(
-                                            addRecipeRequest.title(),
-                                            addRecipeRequest.description(),
-                                            logoId,
-                                            requestOwner.getPersonRaceId()
-                                    )
-                            ).flatMap(recipe -> ingredientService
-                                    .saveAllIngredientsForRecipeId(recipe.getId(), addRecipeRequest.ingredients())
-                                    .collectList()
-                                    .map(ingredientsResponseList ->
-                                            new AddRecipeResponse(
-                                                    recipe.getId(),
-                                                    recipe.getTitle(),
-                                                    recipe.getDescription(),
+    public Mono<AddRecipeResponse> addRecipe(Mono<Person> requestOwnerMono, AddRecipeRequest addRecipeRequest, Mono<FilePart> logoFileMono) {
+        return requestOwnerMono
+                .switchIfEmpty(Mono.error(new AuthorizationException("Unauthorized Access")))
+                .flatMap(requestOwner -> {
+                    return raceService.existsRaceById(requestOwner.getPersonRaceId())
+                            .filter(Boolean::booleanValue)
+                            .switchIfEmpty(Mono.error(new JwtAuthenticationException("Invalid race in jwt")))
+                            .then(logoFileMono)
+                            .flatMap(logoFile -> {
+                                return minioService.uploadLogo(logoFile)
+                                        .flatMap(logoId -> {
+                                            Recipe newRecipe = new Recipe(
+                                                    addRecipeRequest.title(),
+                                                    addRecipeRequest.description(),
                                                     logoId,
-                                                    new RaceResponse(requestOwner.getName()),
-                                                    ingredientsResponseList,
-                                                    recipe.getRank()
-                                            )
-                                    )
-                            );
-                        })
-        );
+                                                    requestOwner.getPersonRaceId()
+                                            );
+                                            return recipeRepository.save(newRecipe)
+                                                    .onErrorResume(e -> {
+                                                        return minioService.deleteLogo(logoId).then(Mono.error(e));
+                                                    })
+                                                    .flatMap(recipe ->
+                                                            ingredientService.saveAllIngredientsForRecipeId(recipe.getId(), addRecipeRequest.ingredients())
+                                                                    .collectList()
+                                                                    .map(ingredientsResponseList -> new AddRecipeResponse(
+                                                                            recipe.getId(),
+                                                                            recipe.getTitle(),
+                                                                            recipe.getDescription(),
+                                                                            logoId,
+                                                                            new RaceResponse(requestOwner.getName()),
+                                                                            ingredientsResponseList,
+                                                                            recipe.getRank()
+                                                                    ))
+                                                    );
+                                        });
+                            });
+                });
     }
 
 
@@ -127,17 +162,27 @@ public class RecipeService {
                 .flatMap(recipe ->
                         raceService.getRaceById(recipe.getRaceId())
                                 .flatMap(race ->
-                                        redisRepository.findLogo(recipe.getLogo())
-                                                .defaultIfEmpty(new Logo("", new byte[0]))
-                                                .map(logo -> new ShortRecipeResponse(
-                                                        recipe.getId(),
-                                                        recipe.getTitle(),
-                                                        logo.getImage(),
-                                                        new RaceResponse(race.getName()),
-                                                        recipe.getRank()
-                                                )))
+                                        minioService.downloadFile(extractFileNameFromUrl(recipe.getLogoUrl()))
+                                                .collectList()
+                                                .map(byteBuffers -> {
+                                                    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                                                    byteBuffers.forEach(buffer -> {
+                                                        while (buffer.hasRemaining()) {
+                                                            outputStream.write(buffer.get());
+                                                        }
+                                                    });
+                                                    return new ShortRecipeResponse(
+                                                            recipe.getId(),
+                                                            recipe.getTitle(),
+                                                            outputStream.toByteArray(),
+                                                            new RaceResponse(race.getName()),
+                                                            recipe.getRank()
+                                                    );
+                                                })
+                                )
                 );
     }
+
 
     public Mono<RecipeResponse> estimate(Mono<Person> requestOwnerMono, ScoreRequest scoreRequest) {
 
@@ -148,24 +193,24 @@ public class RecipeService {
 
         return requiredNewTransactionalOperator.transactional(
                 requestOwnerMono
-                .switchIfEmpty(Mono.error(new AuthorizationException()))
-                .flatMap(requestOwner -> personService.getPersonByEmail(requestOwner.getEmail()))
-                .flatMap(requestOwner ->
-                        raceRelationshipsService.findRelationshipByIds(requestOwner.getId(), scoreRequest.recipeId())
-                                .map(relationship -> new OwnerWithRaceRelationship(requestOwner, relationship))
-                )
-                .flatMap(ownerWithRaceRelationship -> {
-                            var foundEstimationMono = statisticService.findEstimate(ownerWithRaceRelationship.owner.getId(), scoreRequest.recipeId());
-                            return updateRank(
-                                    ownerWithRaceRelationship.owner.getId(),
-                                    scoreRequest,
-                                    ownerWithRaceRelationship.relationship,
-                                    foundEstimationMono,
-                                    timestamp
-                            );
-                        }
-                )
-                .flatMap(recipe -> getRecipeResponseById(recipe.getId()))
+                        .switchIfEmpty(Mono.error(new AuthorizationException()))
+                        .flatMap(requestOwner -> personService.getPersonByEmail(requestOwner.getEmail()))
+                        .flatMap(requestOwner ->
+                                raceRelationshipsService.findRelationshipByIds(requestOwner.getId(), scoreRequest.recipeId())
+                                        .map(relationship -> new OwnerWithRaceRelationship(requestOwner, relationship))
+                        )
+                        .flatMap(ownerWithRaceRelationship -> {
+                                    var foundEstimationMono = statisticService.findEstimate(ownerWithRaceRelationship.owner.getId(), scoreRequest.recipeId());
+                                    return updateRank(
+                                            ownerWithRaceRelationship.owner.getId(),
+                                            scoreRequest,
+                                            ownerWithRaceRelationship.relationship,
+                                            foundEstimationMono,
+                                            timestamp
+                                    );
+                                }
+                        )
+                        .flatMap(recipe -> getRecipeResponseById(recipe.getId()))
         );
     }
 
@@ -189,13 +234,13 @@ public class RecipeService {
 
         return requiredTransactionalOperator.transactional(
                 recipeRepository.findById(scoreRequest.recipeId())
-                .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
-                .flatMap(recipe -> {
-                    recipe.setRank(recipe.getRank() - estimation);
-                    return recipeRepository.save(recipe);
-                })
-                .flatMap(recipe -> statisticService.removeEstimate(ownerId, scoreRequest.recipeId())
-                        .thenReturn(recipe))
+                        .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
+                        .flatMap(recipe -> {
+                            recipe.setRank(recipe.getRank() - estimation);
+                            return recipeRepository.save(recipe);
+                        })
+                        .flatMap(recipe -> statisticService.removeEstimate(ownerId, scoreRequest.recipeId())
+                                .thenReturn(recipe))
         );
     }
 
@@ -206,13 +251,13 @@ public class RecipeService {
 
         return requiredTransactionalOperator.transactional(
                 recipeRepository.findById(scoreRequest.recipeId())
-                .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
-                .flatMap(recipe -> {
-                    recipe.setRank(recipe.getRank() - previousEstimation + currentEstimation);
-                    return recipeRepository.save(recipe);
-                })
-                .flatMap(recipe -> statisticService.collectData(ownerId, scoreRequest.recipeId(), scoreRequest.value(), timestamp)
-                        .thenReturn(recipe))
+                        .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
+                        .flatMap(recipe -> {
+                            recipe.setRank(recipe.getRank() - previousEstimation + currentEstimation);
+                            return recipeRepository.save(recipe);
+                        })
+                        .flatMap(recipe -> statisticService.collectData(ownerId, scoreRequest.recipeId(), scoreRequest.value(), timestamp)
+                                .thenReturn(recipe))
         );
     }
 
@@ -222,14 +267,21 @@ public class RecipeService {
 
         return requiredTransactionalOperator.transactional(
                 recipeRepository.findById(scoreRequest.recipeId())
-                .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
-                .flatMap(recipe -> {
-                    recipe.setRank(recipe.getRank() + estimation);
-                    return recipeRepository.save(recipe);
-                })
-                .flatMap(recipe -> statisticService.collectData(ownerId, scoreRequest.recipeId(), scoreRequest.value(), timestamp)
-                        .thenReturn(recipe))
+                        .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
+                        .flatMap(recipe -> {
+                            recipe.setRank(recipe.getRank() + estimation);
+                            return recipeRepository.save(recipe);
+                        })
+                        .flatMap(recipe -> statisticService.collectData(ownerId, scoreRequest.recipeId(), scoreRequest.value(), timestamp)
+                                .thenReturn(recipe))
         );
+    }
+
+
+    private String extractFileNameFromUrl(String url) {
+        URI uri = URI.create(url);
+        String path = uri.getPath();
+        return path.substring(path.lastIndexOf('/') + 1);
     }
 
 

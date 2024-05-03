@@ -12,4 +12,5 @@ public class WebConfig implements WebFluxConfigurer {
     public void addFormatters(FormatterRegistry registry) {
         registry.addConverter(new StringToFindRecipeRequest());
     }
+
 }

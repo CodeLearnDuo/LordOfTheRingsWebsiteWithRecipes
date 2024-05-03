@@ -13,15 +13,16 @@ public class Recipe {
     private Long id;
     private String title;
     private String description;
-    private String logo;
+    @Column("logo_url")
+    private String logoUrl;
     @Column("race_id")
     private Long raceId;
     private double rank;
 
-    public Recipe(String title, String description, String logo, Long raceId) {
+    public Recipe(String title, String description, String logoUrl, Long raceId) {
         this.title = title;
         this.description = description;
-        this.logo = logo;
+        this.logoUrl = logoUrl;
         this.raceId = raceId;
     }
 }
