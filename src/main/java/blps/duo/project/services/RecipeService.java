@@ -2,14 +2,17 @@ package blps.duo.project.services;
 
 import blps.duo.project.dto.requests.AddRecipeRequest;
 import blps.duo.project.dto.requests.ScoreRequest;
-import blps.duo.project.dto.responses.RaceResponse;
 import blps.duo.project.dto.responses.AddRecipeResponse;
+import blps.duo.project.dto.responses.RaceResponse;
 import blps.duo.project.dto.responses.RecipeResponse;
 import blps.duo.project.dto.responses.ShortRecipeResponse;
 import blps.duo.project.exceptions.AuthorizationException;
 import blps.duo.project.exceptions.JwtAuthenticationException;
 import blps.duo.project.exceptions.NoSuchRecipeException;
-import blps.duo.project.model.*;
+import blps.duo.project.model.Person;
+import blps.duo.project.model.RaceRelationship;
+import blps.duo.project.model.Recipe;
+import blps.duo.project.model.Statistic;
 import blps.duo.project.repositories.RecipeRepository;
 import blps.duo.project.repositories.redis.RedisRepositoryImpl;
 import lombok.RequiredArgsConstructor;
@@ -115,7 +118,8 @@ public class RecipeService {
     }
 
     public Mono<AddRecipeResponse> addRecipe(Mono<Person> requestOwnerMono, AddRecipeRequest addRecipeRequest, Mono<FilePart> logoFileMono) {
-        return requestOwnerMono
+        return requiresNewReadCommitedTransactionalOperator.transactional(
+                requestOwnerMono
                 .switchIfEmpty(Mono.error(new AuthorizationException("Unauthorized Access")))
                 .flatMap(requestOwner -> {
                     return raceService.existsRaceById(requestOwner.getPersonRaceId())
@@ -133,10 +137,16 @@ public class RecipeService {
                                             );
                                             return recipeRepository.save(newRecipe)
                                                     .onErrorResume(e -> {
-                                                        return minioService.deleteLogo(logoId).then(Mono.error(e));
+                                                        try {
+                                                            return minioService.deleteLogo(logoId).then(Mono.error(e));
+                                                        } catch (Throwable throwable) {
+                                                            log.error("PANIC in minio rollback", throwable);
+                                                            return Mono.error(throwable);
+                                                        }
                                                     })
                                                     .flatMap(recipe ->
                                                             ingredientService.saveAllIngredientsForRecipeId(recipe.getId(), addRecipeRequest.ingredients())
+                                                                    .onErrorResume(e -> minioService.deleteLogo(logoId).then(Mono.error(e)))
                                                                     .collectList()
                                                                     .map(ingredientsResponseList -> new AddRecipeResponse(
                                                                             recipe.getId(),
@@ -150,7 +160,8 @@ public class RecipeService {
                                                     );
                                         });
                             });
-                });
+                })
+        );
     }
 
 
