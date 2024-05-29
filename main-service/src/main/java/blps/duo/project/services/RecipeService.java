@@ -6,6 +6,9 @@ import blps.duo.project.dto.responses.AddRecipeResponse;
 import blps.duo.project.dto.responses.RaceResponse;
 import blps.duo.project.dto.responses.RecipeResponse;
 import blps.duo.project.dto.responses.ShortRecipeResponse;
+import blps.duo.project.dto.statistic.StatisticDTO;
+import blps.duo.project.dto.statistic.StatisticPerson;
+import blps.duo.project.dto.statistic.StatisticRecipe;
 import blps.duo.project.exceptions.AuthorizationException;
 import blps.duo.project.exceptions.JwtAuthenticationException;
 import blps.duo.project.exceptions.NoSuchRecipeException;
@@ -14,14 +17,17 @@ import blps.duo.project.model.RaceRelationship;
 import blps.duo.project.model.Recipe;
 import blps.duo.project.model.Statistic;
 import blps.duo.project.repositories.RecipeRepository;
-import blps.duo.project.repositories.redis.RedisRepositoryImpl;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.kafka.sender.KafkaSender;
+import reactor.kafka.sender.SenderRecord;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -44,8 +50,9 @@ public class RecipeService {
     private final TransactionalOperator requiredTransactionalOperator;
     private final TransactionalOperator requiredNewTransactionalOperator;
     private final TransactionalOperator requiresNewReadCommitedTransactionalOperator;
-    private final RedisRepositoryImpl redisRepository;
     private final MinioService minioService;
+    private final KafkaSender<String, String> kafkaSender;
+    private final ObjectMapper objectMapper;
 
     public Mono<RecipeResponse> getRecipeResponseById(Long recipeId) {
         return recipeRepository
@@ -218,15 +225,38 @@ public class RecipeService {
                                             ownerWithRaceRelationship.relationship,
                                             foundEstimationMono,
                                             timestamp
-                                    );
+                                    ).flatMap(recipeWithRankChange -> {
+                                        Recipe recipe = recipeWithRankChange.recipe();
+                                        double rankChange = recipeWithRankChange.rankChange();
+
+                                        StatisticPerson statisticPerson = new StatisticPerson(ownerWithRaceRelationship.owner.getEmail(), ownerWithRaceRelationship.owner.getPersonRaceId());
+                                        StatisticRecipe statisticRecipe = new StatisticRecipe(recipe.getId(), recipe.getTitle(), recipe.getRaceId());
+
+                                        StatisticDTO statisticDTO = new StatisticDTO(statisticPerson, statisticRecipe, rankChange, timestamp.getTime());
+
+                                        String statisticDTOJson;
+
+                                        try {
+                                            statisticDTOJson = objectMapper.writeValueAsString(statisticDTO);
+                                        } catch (Exception e) {
+                                            return Mono.error(new RuntimeException("Error serializing StatisticDTO", e));
+                                        }
+
+                                        return kafkaSender.send(Mono.just(SenderRecord.create(new ProducerRecord<>("ratings-topic", statisticDTOJson), null)))
+                                                .then()
+                                                .thenReturn(recipe);
+                                    });
                                 }
                         )
                         .flatMap(recipe -> getRecipeResponseById(recipe.getId()))
         );
     }
 
-    private Mono<Recipe> updateRank(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Mono<Statistic> foundEstimationMono, Timestamp timestamp) {
-        return requiredTransactionalOperator.transactional(
+
+    private record RecipeWithRankChange(Recipe recipe, double rankChange) {}
+
+    private Mono<RecipeWithRankChange> updateRank(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Mono<Statistic> foundEstimationMono, Timestamp timestamp) {
+        return requiredNewTransactionalOperator.transactional(
                 foundEstimationMono
                         .flatMap(foundEstimation -> {
                             if (foundEstimation.isValue() == scoreRequest.value()) {
@@ -239,52 +269,56 @@ public class RecipeService {
         );
     }
 
-    private Mono<Recipe> updateRankByRemovingEstimate(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Statistic foundEstimation) {
+    private Mono<RecipeWithRankChange> updateRankByRemovingEstimate(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Statistic foundEstimation) {
 
         double estimation = foundEstimation.isValue() ? raceRelationship.getRelationshipCoefficient() : -1 * (1 - raceRelationship.getRelationshipCoefficient());
 
-        return requiredTransactionalOperator.transactional(
+        return requiredNewTransactionalOperator.transactional(
                 recipeRepository.findById(scoreRequest.recipeId())
                         .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
                         .flatMap(recipe -> {
                             recipe.setRank(recipe.getRank() - estimation);
-                            return recipeRepository.save(recipe);
+                            return recipeRepository.save(recipe)
+                                    .map(savedRecipe -> new RecipeWithRankChange(savedRecipe, -estimation));
                         })
-                        .flatMap(recipe -> statisticService.removeEstimate(ownerId, scoreRequest.recipeId())
-                                .thenReturn(recipe))
+                        .flatMap(recipeWithRankChange -> statisticService.removeEstimate(ownerId, scoreRequest.recipeId())
+                                .thenReturn(recipeWithRankChange))
         );
     }
 
-    private Mono<Recipe> updateRankByChangingEstimate(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Statistic foundEstimation, Timestamp timestamp) {
+    private Mono<RecipeWithRankChange> updateRankByChangingEstimate(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Statistic foundEstimation, Timestamp timestamp) {
 
         double currentEstimation = scoreRequest.value() ? raceRelationship.getRelationshipCoefficient() : -1 * (1 - raceRelationship.getRelationshipCoefficient());
         double previousEstimation = foundEstimation.isValue() ? raceRelationship.getRelationshipCoefficient() : -1 * (1 - raceRelationship.getRelationshipCoefficient());
+        double rankChange = currentEstimation - previousEstimation;
 
-        return requiredTransactionalOperator.transactional(
+        return requiredNewTransactionalOperator.transactional(
                 recipeRepository.findById(scoreRequest.recipeId())
                         .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
                         .flatMap(recipe -> {
                             recipe.setRank(recipe.getRank() - previousEstimation + currentEstimation);
-                            return recipeRepository.save(recipe);
+                            return recipeRepository.save(recipe)
+                                    .map(savedRecipe -> new RecipeWithRankChange(savedRecipe, rankChange));
                         })
-                        .flatMap(recipe -> statisticService.collectData(ownerId, scoreRequest.recipeId(), scoreRequest.value(), timestamp)
-                                .thenReturn(recipe))
+                        .flatMap(recipeWithRankChange -> statisticService.collectData(ownerId, scoreRequest.recipeId(), scoreRequest.value(), timestamp)
+                                .thenReturn(recipeWithRankChange))
         );
     }
 
-    private Mono<Recipe> updateRankByAddingEstimate(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Timestamp timestamp) {
+    private Mono<RecipeWithRankChange> updateRankByAddingEstimate(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Timestamp timestamp) {
 
         double estimation = scoreRequest.value() ? raceRelationship.getRelationshipCoefficient() : -1 * (1 - raceRelationship.getRelationshipCoefficient());
 
-        return requiredTransactionalOperator.transactional(
+        return requiredNewTransactionalOperator.transactional(
                 recipeRepository.findById(scoreRequest.recipeId())
                         .switchIfEmpty(Mono.error(new NoSuchRecipeException()))
                         .flatMap(recipe -> {
                             recipe.setRank(recipe.getRank() + estimation);
-                            return recipeRepository.save(recipe);
+                            return recipeRepository.save(recipe)
+                                    .map(savedRecipe -> new RecipeWithRankChange(savedRecipe, estimation));
                         })
-                        .flatMap(recipe -> statisticService.collectData(ownerId, scoreRequest.recipeId(), scoreRequest.value(), timestamp)
-                                .thenReturn(recipe))
+                        .flatMap(recipeWithRankChange -> statisticService.collectData(ownerId, scoreRequest.recipeId(), scoreRequest.value(), timestamp)
+                                .thenReturn(recipeWithRankChange))
         );
     }
 
