@@ -10,6 +10,8 @@ import org.springframework.data.relational.core.mapping.Table;
 public class Person {
 
     @Id
+    @Column("statistic_person_id")
+    private Long statistic_person_id;
     private String email;
     @Column("person_race_id")
     private Long personRaceId;

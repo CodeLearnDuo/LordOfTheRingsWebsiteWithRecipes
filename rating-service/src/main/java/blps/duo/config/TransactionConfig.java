@@ -26,17 +26,6 @@ public class TransactionConfig {
     }
 
     @Bean
-    public TransactionalOperator requiresNewReadCommitedTransactionalOperator(ReactiveTransactionManager transactionManager) {
-
-        DefaultTransactionDefinition definition = new DefaultTransactionDefinition();
-
-        definition.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        definition.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
-
-        return TransactionalOperator.create(transactionManager, definition);
-    }
-
-    @Bean
     public TransactionalOperator requiredNewTransactionalOperator(ReactiveTransactionManager transactionManager) {
 
         DefaultTransactionDefinition definition = new DefaultTransactionDefinition();

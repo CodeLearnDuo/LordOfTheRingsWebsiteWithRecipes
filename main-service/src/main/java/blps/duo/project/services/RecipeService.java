@@ -127,47 +127,47 @@ public class RecipeService {
     public Mono<AddRecipeResponse> addRecipe(Mono<Person> requestOwnerMono, AddRecipeRequest addRecipeRequest, Mono<FilePart> logoFileMono) {
         return requiresNewReadCommitedTransactionalOperator.transactional(
                 requestOwnerMono
-                .switchIfEmpty(Mono.error(new AuthorizationException("Unauthorized Access")))
-                .flatMap(requestOwner -> {
-                    return raceService.existsRaceById(requestOwner.getPersonRaceId())
-                            .filter(Boolean::booleanValue)
-                            .switchIfEmpty(Mono.error(new JwtAuthenticationException("Invalid race in jwt")))
-                            .then(logoFileMono)
-                            .flatMap(logoFile -> {
-                                return minioService.uploadLogo(logoFile)
-                                        .flatMap(logoId -> {
-                                            Recipe newRecipe = new Recipe(
-                                                    addRecipeRequest.title(),
-                                                    addRecipeRequest.description(),
-                                                    logoId,
-                                                    requestOwner.getPersonRaceId()
-                                            );
-                                            return recipeRepository.save(newRecipe)
-                                                    .onErrorResume(e -> {
-                                                        try {
-                                                            return minioService.deleteLogo(logoId).then(Mono.error(e));
-                                                        } catch (Throwable throwable) {
-                                                            log.error("PANIC in minio rollback", throwable);
-                                                            return Mono.error(throwable);
-                                                        }
-                                                    })
-                                                    .flatMap(recipe ->
-                                                            ingredientService.saveAllIngredientsForRecipeId(recipe.getId(), addRecipeRequest.ingredients())
-                                                                    .onErrorResume(e -> minioService.deleteLogo(logoId).then(Mono.error(e)))
-                                                                    .collectList()
-                                                                    .map(ingredientsResponseList -> new AddRecipeResponse(
-                                                                            recipe.getId(),
-                                                                            recipe.getTitle(),
-                                                                            recipe.getDescription(),
-                                                                            logoId,
-                                                                            new RaceResponse(requestOwner.getName()),
-                                                                            ingredientsResponseList,
-                                                                            recipe.getRank()
-                                                                    ))
+                        .switchIfEmpty(Mono.error(new AuthorizationException("Unauthorized Access")))
+                        .flatMap(requestOwner -> {
+                            return raceService.existsRaceById(requestOwner.getPersonRaceId())
+                                    .filter(Boolean::booleanValue)
+                                    .switchIfEmpty(Mono.error(new JwtAuthenticationException("Invalid race in jwt")))
+                                    .then(logoFileMono)
+                                    .flatMap(logoFile -> {
+                                        return minioService.uploadLogo(logoFile)
+                                                .flatMap(logoId -> {
+                                                    Recipe newRecipe = new Recipe(
+                                                            addRecipeRequest.title(),
+                                                            addRecipeRequest.description(),
+                                                            logoId,
+                                                            requestOwner.getPersonRaceId()
                                                     );
-                                        });
-                            });
-                })
+                                                    return recipeRepository.save(newRecipe)
+                                                            .onErrorResume(e -> {
+                                                                try {
+                                                                    return minioService.deleteLogo(logoId).then(Mono.error(e));
+                                                                } catch (Throwable throwable) {
+                                                                    log.error("PANIC in minio rollback", throwable);
+                                                                    return Mono.error(throwable);
+                                                                }
+                                                            })
+                                                            .flatMap(recipe ->
+                                                                    ingredientService.saveAllIngredientsForRecipeId(recipe.getId(), addRecipeRequest.ingredients())
+                                                                            .onErrorResume(e -> minioService.deleteLogo(logoId).then(Mono.error(e)))
+                                                                            .collectList()
+                                                                            .map(ingredientsResponseList -> new AddRecipeResponse(
+                                                                                    recipe.getId(),
+                                                                                    recipe.getTitle(),
+                                                                                    recipe.getDescription(),
+                                                                                    logoId,
+                                                                                    new RaceResponse(requestOwner.getName()),
+                                                                                    ingredientsResponseList,
+                                                                                    recipe.getRank()
+                                                                            ))
+                                                            );
+                                                });
+                                    });
+                        })
         );
     }
 
@@ -226,6 +226,7 @@ public class RecipeService {
                                             foundEstimationMono,
                                             timestamp
                                     ).flatMap(recipeWithRankChange -> {
+
                                         Recipe recipe = recipeWithRankChange.recipe();
                                         double rankChange = recipeWithRankChange.rankChange();
 
@@ -242,7 +243,14 @@ public class RecipeService {
                                             return Mono.error(new RuntimeException("Error serializing StatisticDTO", e));
                                         }
 
-                                        return kafkaSender.send(Mono.just(SenderRecord.create(new ProducerRecord<>("ratings-topic", statisticDTOJson), null)))
+                                        return kafkaSender.send(Mono.just(SenderRecord.create(new ProducerRecord<>("ratings-topic", statisticDTOJson), statisticDTOJson)))
+                                                .doOnNext(
+                                                        senderResult -> {
+                                                            log.info("message was sent offset:{}, value:{}",
+                                                                    senderResult.recordMetadata().offset(),
+                                                                    senderResult.correlationMetadata());
+                                                        }
+                                                )
                                                 .then()
                                                 .thenReturn(recipe);
                                     });
@@ -253,7 +261,8 @@ public class RecipeService {
     }
 
 
-    private record RecipeWithRankChange(Recipe recipe, double rankChange) {}
+    private record RecipeWithRankChange(Recipe recipe, double rankChange) {
+    }
 
     private Mono<RecipeWithRankChange> updateRank(Long ownerId, ScoreRequest scoreRequest, RaceRelationship raceRelationship, Mono<Statistic> foundEstimationMono, Timestamp timestamp) {
         return requiredNewTransactionalOperator.transactional(

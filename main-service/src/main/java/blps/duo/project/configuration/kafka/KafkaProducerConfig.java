@@ -24,6 +24,7 @@ public class KafkaProducerConfig {
         props.put(ProducerConfig.ACKS_CONFIG, "all");
         props.put(ProducerConfig.RETRIES_CONFIG, 3);
         props.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 60000);
+
         SenderOptions<String, String> senderOptions = SenderOptions.create(props);
 
         return KafkaSender.create(senderOptions);
