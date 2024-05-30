@@ -47,38 +47,35 @@ public class RatingConsumerService {
     private static final Logger logger = LoggerFactory.getLogger(RatingConsumerService.class);
 
     private void processMessage(String message) {
+        logger.info("Received message: {}", message);
 
         try {
-
             StatisticDTO statisticDTO = objectMapper.readValue(message, StatisticDTO.class);
+            logger.info("Parsed StatisticDTO: {}", statisticDTO);
 
             requiredNewTransactionalOperator.execute(status -> {
+                logger.info("Starting transaction");
 
-                Mono<Recipe> recipeMono = recipeRepository.findById(statisticDTO.recipe().id())
-                        .doOnNext(recipe -> logger.info("Found recipe: {}", recipe))
-                        .flatMap(recipe -> {
-                            recipe.setRating(recipe.getRating() + statisticDTO.rankChange());
-                            logger.info("Updated recipe rating: {}", recipe.getRating());
-                            return recipeRepository.save(recipe);
-                        })
+                Mono<Recipe> recipeMono = recipeRepository.findByRecipeId(statisticDTO.recipe().id())
                         .switchIfEmpty(Mono.defer(() -> {
                             Recipe newRecipe = new Recipe(
                                     statisticDTO.recipe().id(),
                                     statisticDTO.recipe().title(),
                                     statisticDTO.recipe().recipeRaceId(),
-                                    statisticDTO.rankChange()
+                                    0.0
                             );
-                            logger.info("Creating new recipe: {}", newRecipe);
                             return recipeRepository.save(newRecipe);
                         }))
-                        .doOnSuccess(recipe -> logger.info("Saved recipe: {}", recipe));
+                        .flatMap(recipe -> {
+                            recipe.setRating(recipe.getRating() + statisticDTO.rankChange());
+                            return recipeRepository.save(recipe);
+                        })
+                        .doOnNext(recipe -> logger.info("Processed Recipe: {}", recipe))
+                        .doOnError(e -> logger.error("Error processing recipe", e));
 
-
-                Mono<Person> personMono = personRepository.findById(statisticDTO.person().email())
-                        .doOnNext(person -> logger.info("Found person: {}", person))
+                Mono<Person> personMono = personRepository.findByEmail(statisticDTO.person().email())
                         .flatMap(person -> {
                             person.setRatingCount(person.getRatingCount() + 1);
-                            logger.info("Updated person rating count: {}", person.getRatingCount());
                             return personRepository.save(person);
                         })
                         .switchIfEmpty(Mono.defer(() -> {
@@ -87,10 +84,10 @@ public class RatingConsumerService {
                                     statisticDTO.person().personRaceId(),
                                     1L
                             );
-                            logger.info("Creating new person: {}", newPerson);
                             return personRepository.save(newPerson);
                         }))
-                        .doOnSuccess(person -> logger.info("Saved person: {}", person));
+                        .doOnNext(person -> logger.info("Processed Person: {}", person))
+                        .doOnError(e -> logger.error("Error processing person", e));
 
                 Mono<Void> statisticMono = Mono.zip(recipeMono, personMono)
                         .flatMap(tuple -> {
@@ -100,9 +97,9 @@ public class RatingConsumerService {
                                     statisticDTO.rankChange(),
                                     new Timestamp(statisticDTO.timestamp())
                             );
-                            logger.info("Creating statistic: {}", statistic);
                             return statisticRepository.save(statistic).then();
-                        });
+                        })
+                        .doOnError(e -> logger.error("Error in transaction composition", e));
 
                 return statisticMono
                         .doOnSuccess(aVoid -> logger.info("Transaction completed successfully"))
