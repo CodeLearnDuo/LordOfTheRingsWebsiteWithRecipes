@@ -4,9 +4,9 @@
 
 create table leader
 (
-    email     text          not null,
-    race_id   bigint unique not null,
-    raceTitle text          not null,
-    primary key (race_id)
+    statistic_leader_id serial primary key,
+    email               text          not null,
+    race_id             bigint unique not null,
+    raceTitle           text          not null,
 )
 --rollback drop table statistic
