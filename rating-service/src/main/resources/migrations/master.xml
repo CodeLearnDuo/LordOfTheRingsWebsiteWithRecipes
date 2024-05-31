@@ -11,4 +11,5 @@
     <include file="migrations/tables/001_person_table.sql"/>
     <include file="migrations/tables/002_recipe_table.sql"/>
     <include file="migrations/tables/003_statistic_table.sql"/>
+    <include file="migrations/tables/004_leader_table.sql"/>
 </databaseChangeLog>

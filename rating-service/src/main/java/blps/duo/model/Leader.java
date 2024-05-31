@@ -20,4 +20,10 @@ public class Leader {
     private Long raceId;
     @Column("race_title")
     private String raceTitle;
+
+    public Leader(String email, Long raceId, String raceTitle) {
+        this.email = email;
+        this.raceId = raceId;
+        this.raceTitle = raceTitle;
+    }
 }

@@ -22,25 +22,25 @@ import java.sql.Timestamp;
 @Service
 public class RatingConsumerService {
 
-    private final Flux<String> kafkaReceiver;
+    private final Flux<String> kafkaRatingReceiver;
     private final StatisticRepository statisticRepository;
     private final RecipeRepository recipeRepository;
     private final PersonRepository personRepository;
     private final ObjectMapper objectMapper;
     private final TransactionalOperator requiredNewTransactionalOperator;
 
-    public RatingConsumerService(Flux<String> kafkaReceiver, StatisticRepository statisticRepository,
+    public RatingConsumerService(Flux<String> kafkaRatingReceiver, StatisticRepository statisticRepository,
                                  RecipeRepository recipeRepository, PersonRepository personRepository,
                                  ObjectMapper objectMapper,
                                  TransactionalOperator requiredNewTransactionalOperator) {
-        this.kafkaReceiver = kafkaReceiver;
+        this.kafkaRatingReceiver = kafkaRatingReceiver;
         this.statisticRepository = statisticRepository;
         this.recipeRepository = recipeRepository;
         this.personRepository = personRepository;
         this.objectMapper = objectMapper;
         this.requiredNewTransactionalOperator = requiredNewTransactionalOperator;
 
-        this.kafkaReceiver.subscribe(this::processMessage);
+        this.kafkaRatingReceiver.subscribe(this::processMessage);
 
     }
 

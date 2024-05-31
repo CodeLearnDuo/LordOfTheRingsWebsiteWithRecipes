@@ -16,7 +16,7 @@ import java.util.Map;
 public class KafkaConsumerConfig {
 
     @Bean
-    public Flux<String> kafkaReceiver() {
+    public Flux<String> kafkaRatingReceiver() {
 
         Map<String, Object> props = new HashMap<>();
 
@@ -30,5 +30,24 @@ public class KafkaConsumerConfig {
         receiverOptions = receiverOptions.subscription(Collections.singleton("ratings-topic"));
 
         return KafkaReceiver.create(receiverOptions).receive().map(record -> record.value());
+
     }
+
+    @Bean
+    public Flux<String> kafkaLeaderReceiver() {
+
+        Map<String, Object> props = new HashMap<>();
+
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "leader-group");
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+
+        ReceiverOptions<String, String> receiverOptions = ReceiverOptions.create(props);
+
+        receiverOptions = receiverOptions.subscription(Collections.singleton("leader-topic"));
+
+        return KafkaReceiver.create(receiverOptions).receive().map(record -> record.value());
+    }
+
 }
