@@ -11,9 +11,11 @@ import org.springframework.data.relational.core.mapping.Table;
 @AllArgsConstructor
 public class Leader {
 
+    @Id
+    @Column("statistic_leader_id")
+    private Long statisticLeaderId;
     @Column("email")
     private String email;
-    @Id
     @Column("race_id")
     private Long raceId;
     @Column("race_title")
