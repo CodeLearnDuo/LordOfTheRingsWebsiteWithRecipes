@@ -1,5 +1,6 @@
 package blps.duo.services;
 
+import blps.duo.model.ExpandedStatistic;
 import blps.duo.model.Statistic;
 import blps.duo.repository.StatisticRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,4 +18,11 @@ public class StatisticService {
     public Flux<Statistic> getStatisticByRaceIdAndOffset(Long raceId, Long offset) {
         return statisticRepository.findAllByRaceIdSAndSince(raceId, new Timestamp(System.currentTimeMillis() - offset));
     }
+
+    public Flux<ExpandedStatistic> getExpandedStatisticByRaceIdAndOffset(Long raceId, Long offset) {
+        return statisticRepository.findExpandedStatisticByRaceIdSAndSince(raceId, new Timestamp(System.currentTimeMillis() - offset));
+    }
+
+
+
 }
