@@ -18,8 +18,8 @@ public interface StatisticRepository extends ReactiveCrudRepository<Statistic, L
 
     @Query("SELECT s.id AS id, s.value AS value, s.at AS at, s.person_email AS personEmail, p.person_race_id AS personRaceId, p.rating_count AS personRatingCount, s.recipe_id AS recipeId, r.title AS recipeTitle, r.race_id AS recipeRaceId, r.rating AS recipeRating " +
             "FROM statistic s " +
-            "JOIN public.recipe r ON r.id = s.recipe_id " +
+            "JOIN public.recipe r ON r.recipe_id = s.recipe_id " +
             "JOIN public.person p ON p.email = s.person_email " +
-            "WHERE at >= :timestamp and r.id = :raceId")
+            "WHERE at >= :timestamp and r.race_id = :raceId")
     Flux<ExpandedStatistic> findExpandedStatisticByRaceIdSAndSince(Long raceId, Timestamp timestamp);
 }
