@@ -21,8 +21,9 @@ public class QuartzConfig {
         return TriggerBuilder.newTrigger()
                 .forJob(jobDetail())
                 .withIdentity("emailTrigger")
+                //CronScheduleBuilder.cronSchedule("0 * * * * ?")
                 //CronScheduleBuilder.monthlyOnDayAndHourAndMinute(1, 0, 0)
-                .withSchedule(CronScheduleBuilder.cronSchedule("0 * * * * ?"))
+                .withSchedule(CronScheduleBuilder.monthlyOnDayAndHourAndMinute(1, 0, 0))
                 .build();
     }
 }

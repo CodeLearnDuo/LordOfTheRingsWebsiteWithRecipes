@@ -31,7 +31,7 @@ public class EmailJob implements Job {
     public void sendEmails() {
         tmpLeaderService.getLeaders()
                 .map(leader -> {
-                    System.out.println(leader);
+                    log.info(String.valueOf(leader));
                     return leader;
                 })
                 .switchIfEmpty(Flux.defer(() -> {
@@ -48,6 +48,7 @@ public class EmailJob implements Job {
     }
 
     private SimpleMailMessage createEmailMessage(String recipientEmail, String reportText) {
+        log.info("Создано письмо для: {}", recipientEmail);
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(recipientEmail);
         message.setSubject("Ежемесячная статистика");
