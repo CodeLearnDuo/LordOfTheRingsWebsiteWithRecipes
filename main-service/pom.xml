@@ -101,6 +101,11 @@
             <artifactId>camunda-external-task-client</artifactId>
             <version>7.21.0</version>
         </dependency>
+        <dependency>
+            <groupId>org.camunda.spin</groupId>
+            <artifactId>camunda-spin-core</artifactId>
+            <version>1.9.0</version>
+        </dependency>
     </dependencies>
 
     <properties>

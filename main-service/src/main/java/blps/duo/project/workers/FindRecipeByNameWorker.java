@@ -2,7 +2,6 @@ package blps.duo.project.workers;
 
 import blps.duo.project.dto.responses.ShortRecipeResponse;
 import blps.duo.project.services.RecipeService;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.camunda.bpm.client.ExternalTaskClient;
 import org.camunda.bpm.client.task.ExternalTask;
@@ -51,11 +50,13 @@ public class FindRecipeByNameWorker {
                     return Mono.empty();
                 })
                 .subscribe();
+
     }
 
     private Map<String, Object> mapToProcessVariables(List<ShortRecipeResponse> recipes) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("foundRecipes", recipes);
+
         return variables;
     }
 }

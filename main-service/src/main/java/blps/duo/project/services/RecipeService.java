@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.sql.Timestamp;
 import java.util.Collections;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 @Service
@@ -63,52 +64,47 @@ public class RecipeService {
                                 .flatMap(raceResponse ->
                                         ingredientService.getAllRecipesIngredients(recipeId)
                                                 .collectList()
-                                                .flatMap(ingredients ->
-                                                        minioService.downloadFile(extractFileNameFromUrl(recipe.getLogoUrl()))
-                                                                .collectList()
-                                                                .defaultIfEmpty(Collections.emptyList())
-                                                                .map(dataList -> {
-                                                                    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                                                                    dataList.forEach(buffer -> {
-                                                                        byte[] bytes = new byte[buffer.remaining()];
-                                                                        buffer.get(bytes);
-                                                                        try {
-                                                                            outputStream.write(bytes);
-                                                                        } catch (IOException e) {
-                                                                            throw new RuntimeException(e);
-                                                                        }
-                                                                    });
-                                                                    return new RecipeResponse(
-                                                                            recipe.getId(),
-                                                                            recipe.getTitle(),
-                                                                            recipe.getDescription(),
-                                                                            outputStream.toByteArray(),
-                                                                            new RaceResponse(raceResponse.getName()),
-                                                                            ingredients,
-                                                                            recipe.getRank()
-                                                                    );
-                                                                })
-                                                )
+                                                .flatMap(ingredients -> {
+                                                    String logoUrl = Objects.equals(recipe.getLogoUrl(), "default-recipe-logo.jpeg") ? "default-recipe-logo.jpeg" : extractFileNameFromUrl(recipe.getLogoUrl());
+
+                                                    return minioService.downloadFileOrDefault(logoUrl)
+                                                            .collectList()
+                                                            .defaultIfEmpty(Collections.emptyList())
+                                                            .map(dataList -> {
+                                                                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                                                                dataList.forEach(buffer -> {
+                                                                    byte[] bytes = new byte[buffer.remaining()];
+                                                                    buffer.get(bytes);
+                                                                    try {
+                                                                        outputStream.write(bytes);
+                                                                    } catch (IOException e) {
+                                                                        throw new RuntimeException(e);
+                                                                    }
+                                                                });
+                                                                return new RecipeResponse(
+                                                                        recipe.getId(),
+                                                                        recipe.getTitle(),
+                                                                        recipe.getDescription(),
+                                                                        outputStream.toByteArray(),
+                                                                        new RaceResponse(raceResponse.getName()),
+                                                                        ingredients,
+                                                                        recipe.getRank()
+                                                                );
+                                                            });
+                                                })
                                 )
                 );
     }
+
 
     public Flux<ShortRecipeResponse> getAllShortRecipes() {
         return recipeRepository.findAll()
                 .flatMap(recipe ->
                         raceService.getRaceById(recipe.getRaceId())
                                 .flatMap(raceResponse -> {
-                                    if (recipe.getLogoUrl() == null || recipe.getLogoUrl().isEmpty()) {
-                                        return Mono.just(new ShortRecipeResponse(
-                                                recipe.getId(),
-                                                recipe.getTitle(),
-                                                new byte[0],
-                                                new RaceResponse(raceResponse.getName()),
-                                                recipe.getRank()
-                                        ));
-                                    }
+                                    String logoUrl = Objects.equals(recipe.getLogoUrl(), "default-recipe-logo.jpeg") ? "default-recipe-logo.jpeg" : extractFileNameFromUrl(recipe.getLogoUrl());
 
-                                    return minioService.downloadFile(extractFileNameFromUrl(recipe.getLogoUrl()))
+                                    return minioService.downloadFileOrDefault(logoUrl)
                                             .collectList()
                                             .defaultIfEmpty(Collections.emptyList())
                                             .map(dataList -> {
@@ -134,6 +130,7 @@ public class RecipeService {
                 );
     }
 
+
     public Mono<AddRecipeResponse> addRecipe(Mono<Person> requestOwnerMono, AddRecipeRequest addRecipeRequest, Mono<FilePart> logoFileMono) {
         return requiresNewReadCommitedTransactionalOperator.transactional(
                 requestOwnerMono
@@ -144,10 +141,11 @@ public class RecipeService {
                                 .then(logoFileMono.hasElement())
                                 .flatMap(hasLogo -> {
                                     if (!hasLogo) {
+                                        String defaultLogoUrl = "default-recipe-logo.jpeg";
                                         Recipe newRecipe = new Recipe(
                                                 addRecipeRequest.title(),
                                                 addRecipeRequest.description(),
-                                                null,
+                                                defaultLogoUrl,
                                                 requestOwner.getPersonRaceId()
                                         );
                                         return saveRecipe(newRecipe, addRecipeRequest, requestOwner);
@@ -169,6 +167,7 @@ public class RecipeService {
                         )
         );
     }
+
 
     private Mono<AddRecipeResponse> saveRecipe(Recipe recipe, AddRecipeRequest addRecipeRequest, Person requestOwner) {
         return recipeRepository.save(recipe)
@@ -209,36 +208,29 @@ public class RecipeService {
                 .flatMap(recipe ->
                         raceService.getRaceById(recipe.getRaceId())
                                 .flatMap(race -> {
-                                    if (recipe.getLogoUrl() != null) {
-                                        return minioService.downloadFile(extractFileNameFromUrl(recipe.getLogoUrl()))
-                                                .collectList()
-                                                .map(byteBuffers -> {
-                                                    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                                                    byteBuffers.forEach(buffer -> {
-                                                        while (buffer.hasRemaining()) {
-                                                            outputStream.write(buffer.get());
-                                                        }
-                                                    });
-                                                    return new ShortRecipeResponse(
-                                                            recipe.getId(),
-                                                            recipe.getTitle(),
-                                                            outputStream.toByteArray(),
-                                                            new RaceResponse(race.getName()),
-                                                            recipe.getRank()
-                                                    );
+                                    String logoUrl = Objects.equals(recipe.getLogoUrl(), "default-recipe-logo.jpeg") ? "default-recipe-logo.jpeg" : extractFileNameFromUrl(recipe.getLogoUrl());
+
+                                    return minioService.downloadFileOrDefault(logoUrl)
+                                            .collectList()
+                                            .map(byteBuffers -> {
+                                                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                                                byteBuffers.forEach(buffer -> {
+                                                    while (buffer.hasRemaining()) {
+                                                        outputStream.write(buffer.get());
+                                                    }
                                                 });
-                                    } else {
-                                        return Mono.just(new ShortRecipeResponse(
-                                                recipe.getId(),
-                                                recipe.getTitle(),
-                                                null,
-                                                new RaceResponse(race.getName()),
-                                                recipe.getRank()
-                                        ));
-                                    }
+                                                return new ShortRecipeResponse(
+                                                        recipe.getId(),
+                                                        recipe.getTitle(),
+                                                        outputStream.toByteArray(),
+                                                        new RaceResponse(race.getName()),
+                                                        recipe.getRank()
+                                                );
+                                            });
                                 })
                 );
     }
+
 
 
     public Mono<RecipeResponse> estimate(Mono<Person> requestOwnerMono, ScoreRequest scoreRequest) {

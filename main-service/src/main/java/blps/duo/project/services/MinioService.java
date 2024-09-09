@@ -27,6 +27,14 @@ public class MinioService {
     @Value("${minio.bucket.name}")
     private String bucketName;
 
+    public Flux<ByteBuffer> downloadFileOrDefault(String objectName) {
+        if ("default-recipe-logo.jpeg".equals(objectName)) {
+            return downloadDefaultImage();
+        } else {
+            return downloadFile(objectName);
+        }
+    }
+
 
     public Mono<String> uploadLogo(FilePart file) {
         String logoId = UUID.randomUUID().toString();
@@ -124,6 +132,27 @@ public class MinioService {
                 throw new RuntimeException("Failed to delete object from MinIO", e);
             }
         }).subscribeOn(Schedulers.boundedElastic()).then();
+    }
+
+    private Flux<ByteBuffer> downloadDefaultImage() {
+        return Mono.fromCallable(() -> {
+                    File defaultImageFile = new File("main-service/src/main/resources/static/images/default-recipe-logo.jpg");
+                    if (!defaultImageFile.exists()) {
+                        throw new FileNotFoundException("Default image not found");
+                    }
+
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    try (FileInputStream fis = new FileInputStream(defaultImageFile)) {
+                        byte[] buffer = new byte[4096];
+                        int bytesRead;
+                        while ((bytesRead = fis.read(buffer)) != -1) {
+                            baos.write(buffer, 0, bytesRead);
+                        }
+                    }
+                    return ByteBuffer.wrap(baos.toByteArray());
+                })
+                .flux()
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
 

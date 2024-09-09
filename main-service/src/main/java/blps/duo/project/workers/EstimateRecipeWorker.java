@@ -21,6 +21,7 @@ public class EstimateRecipeWorker {
     private final RecipeService recipeService;
     private final PersonService personService;
 
+
     public EstimateRecipeWorker(RecipeService recipeService, ExternalTaskClient client, PersonService personService) {
         this.recipeService = recipeService;
         this.personService = personService;
@@ -34,36 +35,33 @@ public class EstimateRecipeWorker {
                 .open();
     }
 
-    private void handleTask(ExternalTask externalTask, ExternalTaskService externalTaskService) {
-        String personEmail = externalTask.getVariable("email_field");
 
+    private void handleTask(ExternalTask externalTask, ExternalTaskService externalTaskService) {
+
+        String personEmail = externalTask.getVariable("email_field");
         Integer recipeId = externalTask.getVariable("recipe_id_field");
 
         Boolean value = Boolean.valueOf(externalTask.getVariable("like_field"));
-
         ScoreRequest scoreRequest = new ScoreRequest(value, Integer.toUnsignedLong(recipeId));
 
         Mono<Person> personMono = personService.getPersonByEmail(personEmail);
 
+
         recipeService.estimate(personMono, scoreRequest)
-                .doOnNext(var -> {
-                    System.out.println("@@@" + var);
+                .flatMap(recipeResponse -> {
+                    return recipeService.getRecipeResponseById(recipeResponse.id())
+                            .flatMap(updatedRecipe -> {
+                                Map<String, Object> variables = mapToProcessVariables(updatedRecipe);
+                                externalTaskService.complete(externalTask, variables);
+                                return Mono.just(updatedRecipe);
+                            });
                 })
-                .map(this::mapToProcessVariables)
-                .doOnNext(var -> {
-                    System.out.println("@@@" + var);
-                })
-                .flatMap(variables -> {
-                    externalTaskService.complete(externalTask, variables);
-                    return Mono.empty();
-                })
-                .onErrorResume(error -> {
-                    Map<String, Object> variables = new HashMap<>();
-                    variables.put("errorMessage", error.getMessage());
+                .doOnError(error -> {
+                    System.out.println("Ошибка в estimate: " + error.getMessage());
                     externalTaskService.handleFailure(externalTask, error.getMessage(), error.getMessage(), 0, 0);
-                    return Mono.empty();
                 })
                 .subscribe();
+
     }
 
 
