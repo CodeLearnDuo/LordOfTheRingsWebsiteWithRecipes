@@ -5,6 +5,7 @@ import blps.duo.repository.LeaderRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 
@@ -16,5 +17,9 @@ public class TmpLeaderService {
 
     public Flux<Leader> getLeaders() {
         return leaderRepository.findAll();
+    }
+
+    public Mono<Leader> getLeaderByEmail(String email) {
+        return leaderRepository.findByEmail(email);
     }
 }
