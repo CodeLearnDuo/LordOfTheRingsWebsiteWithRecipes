@@ -21,6 +21,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
@@ -54,6 +56,9 @@ public class RecipeService {
     private final MinioService minioService;
     private final KafkaSender<String, String> kafkaSender;
     private final ObjectMapper objectMapper;
+
+    private static final Logger logger = LoggerFactory.getLogger(RecipeService.class);
+
 
     public Mono<RecipeResponse> getRecipeResponseById(Long recipeId) {
         return recipeRepository
@@ -141,6 +146,7 @@ public class RecipeService {
                                 .then(logoFileMono.hasElement())
                                 .flatMap(hasLogo -> {
                                     if (!hasLogo) {
+                                        logger.info("No logo provided, using default logo.");
                                         String defaultLogoUrl = "default-recipe-logo.jpeg";
                                         Recipe newRecipe = new Recipe(
                                                 addRecipeRequest.title(),
@@ -150,18 +156,20 @@ public class RecipeService {
                                         );
                                         return saveRecipe(newRecipe, addRecipeRequest, requestOwner);
                                     } else {
-                                        return logoFileMono.flatMap(logoFile ->
-                                                minioService.uploadLogo(logoFile)
-                                                        .flatMap(logoId -> {
-                                                            Recipe newRecipe = new Recipe(
-                                                                    addRecipeRequest.title(),
-                                                                    addRecipeRequest.description(),
-                                                                    logoId,
-                                                                    requestOwner.getPersonRaceId()
-                                                            );
-                                                            return saveRecipe(newRecipe, addRecipeRequest, requestOwner);
-                                                        })
-                                        );
+                                        return logoFileMono.flatMap(logoFile -> {
+                                            logger.info("Logo file detected, uploading to Minio.");
+                                            return minioService.uploadLogo(logoFile)
+                                                    .flatMap(logoId -> {
+                                                        logger.info("Logo uploaded with ID: {}", logoId);
+                                                        Recipe newRecipe = new Recipe(
+                                                                addRecipeRequest.title(),
+                                                                addRecipeRequest.description(),
+                                                                logoId,
+                                                                requestOwner.getPersonRaceId()
+                                                        );
+                                                        return saveRecipe(newRecipe, addRecipeRequest, requestOwner);
+                                                    });
+                                        });
                                     }
                                 })
                         )
@@ -230,7 +238,6 @@ public class RecipeService {
                                 })
                 );
     }
-
 
 
     public Mono<RecipeResponse> estimate(Mono<Person> requestOwnerMono, ScoreRequest scoreRequest) {

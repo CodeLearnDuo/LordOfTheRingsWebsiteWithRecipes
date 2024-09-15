@@ -3,38 +3,36 @@ package blps.duo.project.dto.responses;
 import java.util.Arrays;
 import java.util.Objects;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Data;
-import lombok.Getter;
-
-import java.util.Base64;
-
-@Data
-public class ShortRecipeResponse {
-    private Long id;
-    private String title;
-    private byte[] logo;
-    private RaceResponse race;
-    private double rank;
-
-    public ShortRecipeResponse(Long id, String title, byte[] logo, RaceResponse race, double rank) {
-        this.id = id;
-        this.title = title;
-        this.logo = logo;
-        this.race = race;
-        this.rank = rank;
+public record ShortRecipeResponse(
+        Long id,
+        String title,
+        byte[] logo,
+        RaceResponse raceName,
+        double rank
+) {
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ShortRecipeResponse that = (ShortRecipeResponse) o;
+        return Double.compare(rank, that.rank) == 0 && Objects.equals(id, that.id) && Objects.equals(title, that.title) && Arrays.equals(logo, that.logo) && Objects.equals(raceName, that.raceName);
     }
 
-
-    @JsonProperty("logo")
-    public String getLogoBase64() {
-        return Base64.getEncoder().encodeToString(logo);
+    @Override
+    public int hashCode() {
+        int result = Objects.hash(id, title, raceName, rank);
+        result = 31 * result + Arrays.hashCode(logo);
+        return result;
     }
 
-    @JsonProperty("logo")
-    public void setLogoBase64(String logoBase64) {
-        this.logo = Base64.getDecoder().decode(logoBase64);
+    @Override
+    public String toString() {
+        return "ShortRecipeResponse{" +
+                "id=" + id +
+                ", title='" + title + '\'' +
+                ", logo=" + Arrays.toString(logo) +
+                ", raceName=" + raceName +
+                ", rank=" + rank +
+                '}';
     }
 }
-

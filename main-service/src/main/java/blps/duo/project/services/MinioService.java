@@ -3,8 +3,11 @@ package blps.duo.project.services;
 import io.minio.*;
 import io.minio.http.Method;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
@@ -27,6 +30,9 @@ public class MinioService {
     @Value("${minio.bucket.name}")
     private String bucketName;
 
+    private static final Logger logger = LoggerFactory.getLogger(MinioService.class);
+
+
     public Flux<ByteBuffer> downloadFileOrDefault(String objectName) {
         if ("default-recipe-logo.jpeg".equals(objectName)) {
             return downloadDefaultImage();
@@ -40,6 +46,8 @@ public class MinioService {
         String logoId = UUID.randomUUID().toString();
         String fileName = logoId + "_" + file.filename();
 
+        logger.info("Uploading logo with filename: {}", fileName);
+
         return requiredTransactionalOperator.transactional(
                 DataBufferUtils.join(file.content())
                         .flatMap(dataBuffer -> {
@@ -51,27 +59,39 @@ public class MinioService {
 
                             ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
                             try {
+                                HttpHeaders headers = file.headers();
+                                String contentType = (headers != null && headers.getContentType() != null)
+                                        ? headers.getContentType().toString()
+                                        : "application/octet-stream";
+
                                 minioClient.putObject(
                                         PutObjectArgs.builder()
                                                 .bucket(bucketName)
                                                 .object(fileName)
                                                 .stream(bais, baos.size(), 10485760)
-                                                .contentType(file.headers().getContentType().toString())
-                                                .build());
+                                                .contentType(contentType)
+                                                .build()
+                                );
+
                                 String url = minioClient.getPresignedObjectUrl(
                                         GetPresignedObjectUrlArgs.builder()
                                                 .method(Method.GET)
                                                 .bucket(bucketName)
                                                 .object(fileName)
-                                                .build());
+                                                .build()
+                                );
+
+                                logger.info("Successfully uploaded logo with URL: {}", url);
                                 return Mono.just(url);
                             } catch (Exception e) {
+                                logger.error("Error uploading logo: {}", e.getMessage(), e);
                                 return Mono.error(e);
                             } finally {
                                 try {
                                     bais.close();
                                     baos.close();
                                 } catch (IOException e) {
+                                    logger.error("Error closing streams after uploading logo", e);
                                     return Mono.error(e);
                                 }
                             }
@@ -79,10 +99,16 @@ public class MinioService {
         );
     }
 
+
+
     public Flux<ByteBuffer> downloadFile(String objectName) {
-        return Mono.fromCallable(() -> minioClient.statObject(
-                        StatObjectArgs.builder().bucket(bucketName).object(objectName).build()
-                ))
+        return Mono.fromCallable(() -> {
+                    StatObjectResponse statObjectResponse = minioClient.statObject(
+                            StatObjectArgs.builder().bucket(bucketName).object(objectName).build()
+                    );
+                    logger.info("Object size: {}", statObjectResponse.size());
+                    return statObjectResponse;
+                })
                 .flatMapMany(stat -> {
                     if (stat.size() > 0) {
                         return Flux.usingWhen(
@@ -115,9 +141,13 @@ public class MinioService {
                         return Flux.error(new RuntimeException("No such object in the bucket"));
                     }
                 })
-                .onErrorResume(e -> Flux.empty())
+                .onErrorResume(e -> {
+                    logger.error("Error downloading file from MinIO: {}", e.getMessage());
+                    return Flux.empty();
+                })
                 .subscribeOn(Schedulers.boundedElastic());
     }
+
 
     public Mono<Void> deleteLogo(String objectName) {
         return Mono.fromRunnable(() -> {
