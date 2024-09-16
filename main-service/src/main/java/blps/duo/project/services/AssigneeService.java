@@ -1,7 +1,7 @@
-package blps.duo.services;
+package blps.duo.project.services;
 
-import blps.duo.dto.CamundaTaskResponse;
-import blps.duo.dto.CamundaUserProfileResponse;
+import blps.duo.project.dto.responses.CamundaTaskResponse;
+import blps.duo.project.dto.responses.CamundaUserProfileResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;

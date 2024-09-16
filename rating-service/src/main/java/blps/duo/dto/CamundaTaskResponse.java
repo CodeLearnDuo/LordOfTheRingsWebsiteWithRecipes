@@ -1,6 +1,6 @@
 package blps.duo.dto;
 
-public record TaskResponse(
+public record CamundaTaskResponse(
         String id,
         String name,
         String assignee,

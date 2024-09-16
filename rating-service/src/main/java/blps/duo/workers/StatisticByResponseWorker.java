@@ -1,5 +1,6 @@
 package blps.duo.workers;
 
+import blps.duo.dto.CamundaUserProfileResponse;
 import blps.duo.services.AssigneeService;
 import blps.duo.services.ReportService;
 import lombok.extern.slf4j.Slf4j;
@@ -42,7 +43,8 @@ public class StatisticByResponseWorker {
         var offset = Long.parseLong(offsetString) * ONE_DAY;
 
         assigneeService
-                .getAssigneeEmail(processDefinitionKey)
+                .getAssigneeUser(processDefinitionKey)
+                .map(CamundaUserProfileResponse::email)
                 .flatMap(email -> reportService.getSmallReportByLeaderEmailAndOffset(email, offset)
                         .map(reportText -> createEmailMessage(email, reportText, offsetString)))
                 .doOnNext(mailSender::send)

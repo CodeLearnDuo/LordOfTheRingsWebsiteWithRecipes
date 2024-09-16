@@ -1,6 +1,6 @@
 package blps.duo.dto;
 
-public record UserProfileResponse(
+public record CamundaUserProfileResponse(
     String id,
     String firstName,
     String lastName,

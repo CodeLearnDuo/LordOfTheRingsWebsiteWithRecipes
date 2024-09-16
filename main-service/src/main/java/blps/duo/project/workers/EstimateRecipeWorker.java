@@ -1,10 +1,13 @@
 package blps.duo.project.workers;
 
 import blps.duo.project.dto.requests.ScoreRequest;
+import blps.duo.project.dto.responses.CamundaUserProfileResponse;
 import blps.duo.project.dto.responses.RecipeResponse;
 import blps.duo.project.model.Person;
+import blps.duo.project.services.AssigneeService;
 import blps.duo.project.services.PersonService;
 import blps.duo.project.services.RecipeService;
+import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.client.ExternalTaskClient;
 import org.camunda.bpm.client.task.ExternalTask;
 import org.camunda.bpm.client.task.ExternalTaskService;
@@ -15,17 +18,20 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Component
+@Slf4j
 public class EstimateRecipeWorker {
 
     private final ExternalTaskClient client;
     private final RecipeService recipeService;
     private final PersonService personService;
+    private final AssigneeService assigneeService;
 
 
-    public EstimateRecipeWorker(RecipeService recipeService, ExternalTaskClient client, PersonService personService) {
+    public EstimateRecipeWorker(RecipeService recipeService, ExternalTaskClient client, PersonService personService, AssigneeService assigneeService) {
         this.recipeService = recipeService;
         this.personService = personService;
         this.client = client;
+        this.assigneeService = assigneeService;
         subscribeToTask();
     }
 
@@ -38,7 +44,10 @@ public class EstimateRecipeWorker {
 
     private void handleTask(ExternalTask externalTask, ExternalTaskService externalTaskService) {
 
-        String personEmail = externalTask.getVariable("email_field");
+        String personEmail = assigneeService
+                .getAssigneeUser(externalTask.getProcessInstanceId())
+                .map(CamundaUserProfileResponse::email)
+                .block();
         Integer recipeId = externalTask.getVariable("recipe_id_field");
 
         Boolean value = Boolean.valueOf(externalTask.getVariable("like_field"));
@@ -57,7 +66,7 @@ public class EstimateRecipeWorker {
                             });
                 })
                 .doOnError(error -> {
-                    System.out.println("Ошибка в estimate: " + error.getMessage());
+                    log.error("Ошибка в estimate: {}", error.getMessage());
                     externalTaskService.handleFailure(externalTask, error.getMessage(), error.getMessage(), 0, 0);
                 })
                 .subscribe();
