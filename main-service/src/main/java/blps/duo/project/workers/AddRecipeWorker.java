@@ -1,11 +1,8 @@
 package blps.duo.project.workers;
-
 import blps.duo.project.dto.requests.AddRecipeRequest;
 import blps.duo.project.dto.requests.IngredientsRequest;
 import blps.duo.project.dto.responses.AddRecipeResponse;
-import blps.duo.project.dto.responses.CamundaUserProfileResponse;
 import blps.duo.project.model.Person;
-import blps.duo.project.services.AssigneeService;
 import blps.duo.project.services.PersonService;
 import blps.duo.project.services.RecipeService;
 import blps.duo.project.util.CustomFilePart;
@@ -25,31 +22,25 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 @Component
 public class AddRecipeWorker {
-
     private final RecipeService recipeService;
     private final PersonService personService;
     private final ExternalTaskClient client;
-    private final AssigneeService assigneeService;
 
     private static final Logger logger = LoggerFactory.getLogger(AddRecipeWorker.class);
 
-    public AddRecipeWorker(RecipeService recipeService, PersonService personService, ExternalTaskClient client, AssigneeService assigneeService) {
+    public AddRecipeWorker(RecipeService recipeService, PersonService personService, ExternalTaskClient client) {
         this.recipeService = recipeService;
         this.personService = personService;
         this.client = client;
-        this.assigneeService = assigneeService;
         subscribeToTask();
     }
-
     private void subscribeToTask() {
         client.subscribe("add-recipe-task")
                 .handler(this::handleTask)
                 .open();
     }
-
     private void handleTask(ExternalTask externalTask, ExternalTaskService externalTaskService) {
         String title = externalTask.getVariable("title_field");
         String description = externalTask.getVariable("description_field");
@@ -118,11 +109,8 @@ public class AddRecipeWorker {
     }
 
     private Mono<Person> getPersonFromContext(ExternalTask externalTask) {
-        return assigneeService.getAssigneeUser(externalTask.getProcessInstanceId())
-                .map(CamundaUserProfileResponse::email)
-                .flatMap(personService::getPersonByEmail);
+        return personService.getPersonByEmail(externalTask.getVariable("email_field"));
     }
-
     private void handleSuccess(AddRecipeResponse response, ExternalTask externalTask, ExternalTaskService externalTaskService) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("response", response);
@@ -144,7 +132,6 @@ public class AddRecipeWorker {
 
         for (String ingredientString : ingredientsArray) {
             String[] parts = ingredientString.split(",", 2);
-
             if (parts.length == 2) {
                 String name = parts[0].trim();
                 String description = parts[1].trim();
@@ -153,7 +140,6 @@ public class AddRecipeWorker {
                 throw new IllegalArgumentException("Invalid ingredient format: " + ingredientString);
             }
         }
-
         return ingredientsList;
     }
 }

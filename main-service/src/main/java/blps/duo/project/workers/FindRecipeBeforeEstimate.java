@@ -35,13 +35,11 @@ public class FindRecipeBeforeEstimate {
         this.client = client;
         subscribeToTask();
     }
-
     private void subscribeToTask() {
         client.subscribe("find-recipe-before-estimate")
                 .handler(this::handleTask)
                 .open();
     }
-
     private void handleTask(ExternalTask externalTask, ExternalTaskService externalTaskService) {
         String recipeName = externalTask.getVariable("recipe_name_field");
 
