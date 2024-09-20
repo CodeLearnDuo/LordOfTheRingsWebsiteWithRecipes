@@ -41,7 +41,8 @@ public class EmailJob implements Job {
                         reportService.getSmallReportByRaceIdAndOffset(leader.getRaceId(), ONE_MONTH)
                                 .map(report -> createEmailMessage(leader.getEmail(), report))
                 )
-                .doOnNext(mailSender::send)
+                //TMP:sout change on mailSender::send to send emails
+                .doOnNext(System.out::println)
                 .doOnComplete(() -> log.info("Все письма успешно отправлены."))
                 .doOnError(error -> log.error("Произошла ошибка при отправке писем: ", error))
                 .subscribe();

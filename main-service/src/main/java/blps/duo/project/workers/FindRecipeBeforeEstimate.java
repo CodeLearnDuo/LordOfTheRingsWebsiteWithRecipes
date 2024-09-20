@@ -4,6 +4,7 @@ import blps.duo.project.repositories.RecipeRepository;
 import blps.duo.project.services.MinioService;
 import blps.duo.project.services.RecipeService;
 import blps.duo.project.util.RecipeFileHelper;
+import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.client.ExternalTaskClient;
 import org.camunda.bpm.client.task.ExternalTask;
 import org.camunda.bpm.client.task.ExternalTaskService;
@@ -14,13 +15,12 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @Component
 public class FindRecipeBeforeEstimate {
 
@@ -41,9 +41,7 @@ public class FindRecipeBeforeEstimate {
                 .open();
     }
     private void handleTask(ExternalTask externalTask, ExternalTaskService externalTaskService) {
-        String recipeName = externalTask.getVariable("recipe_name_field");
-
-        recipeRepository.findByTitle(recipeName)
+        recipeRepository.findByTitle(externalTask.getVariable("recipe_name_field"))
                 .switchIfEmpty(Mono.error(new RuntimeException("Recipe not found")))
                 .flatMap(recipe -> {
                     Map<String, Object> variables = new HashMap<>();
@@ -62,12 +60,18 @@ public class FindRecipeBeforeEstimate {
                             });
                 })
                 .onErrorResume(error -> {
-                    Map<String, Object> variables = new HashMap<>();
-                    variables.put("errorMessage", error.getMessage());
-                    externalTaskService.handleFailure(externalTask, error.getMessage(), error.getMessage(), 0, 0);
+                    handleError(error, externalTask, externalTaskService);
                     return Mono.empty();
                 })
                 .subscribe();
+    }
+
+    private void handleError(Throwable throwable, ExternalTask externalTask, ExternalTaskService externalTaskService) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("errorCode", "BP_ERROR");
+        variables.put("errorMessage", throwable.getMessage());
+        externalTaskService.handleBpmnError(externalTask, "BP_ERROR", throwable.getMessage(), variables);
+        log.error("Form data error: {}", throwable.getMessage(), throwable);
     }
 
     private String extractFileNameFromUrl(String url) {

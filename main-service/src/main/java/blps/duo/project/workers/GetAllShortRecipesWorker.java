@@ -2,6 +2,7 @@ package blps.duo.project.workers;
 
 import blps.duo.project.dto.responses.ShortRecipeResponse;
 import blps.duo.project.services.RecipeService;
+import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.client.ExternalTaskClient;
 import org.camunda.bpm.client.task.ExternalTask;
 import org.camunda.bpm.client.task.ExternalTaskService;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 @Component
+@Slf4j
 public class GetAllShortRecipesWorker {
 
     private final RecipeService recipeService;
@@ -37,12 +39,18 @@ public class GetAllShortRecipesWorker {
                     return Mono.empty();
                 })
                 .onErrorResume(error -> {
-                    Map<String, Object> variables = new HashMap<>();
-                    variables.put("errorMessage", error.getMessage());
-                    externalTaskService.handleFailure(externalTask, error.getMessage(), error.getMessage(), 0, 0);
+                    handleError(error, externalTask, externalTaskService);
                     return Mono.empty();
                 })
                 .subscribe();
+    }
+
+    private void handleError(Throwable throwable, ExternalTask externalTask, ExternalTaskService externalTaskService) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("errorCode", "BP_ERROR");
+        variables.put("errorMessage", throwable.getMessage());
+        externalTaskService.handleBpmnError(externalTask, "BP_ERROR", throwable.getMessage(), variables);
+        log.error("Form data error: {}", throwable.getMessage(), throwable);
     }
 
     private Map<String, Object> mapToProcessVariables(List<ShortRecipeResponse> recipes) {

@@ -1,8 +1,11 @@
 package blps.duo.project.workers;
+
 import blps.duo.project.dto.requests.AddRecipeRequest;
 import blps.duo.project.dto.requests.IngredientsRequest;
 import blps.duo.project.dto.responses.AddRecipeResponse;
+import blps.duo.project.dto.responses.CamundaUserProfileResponse;
 import blps.duo.project.model.Person;
+import blps.duo.project.services.AssigneeService;
 import blps.duo.project.services.PersonService;
 import blps.duo.project.services.RecipeService;
 import blps.duo.project.util.CustomFilePart;
@@ -27,10 +30,12 @@ public class AddRecipeWorker {
     private final RecipeService recipeService;
     private final PersonService personService;
     private final ExternalTaskClient client;
+    private final AssigneeService assigneeService;
 
     private static final Logger logger = LoggerFactory.getLogger(AddRecipeWorker.class);
 
-    public AddRecipeWorker(RecipeService recipeService, PersonService personService, ExternalTaskClient client) {
+    public AddRecipeWorker(RecipeService recipeService, PersonService personService, ExternalTaskClient client, AssigneeService assigneeService) {
+        this.assigneeService = assigneeService;
         this.recipeService = recipeService;
         this.personService = personService;
         this.client = client;
@@ -48,15 +53,13 @@ public class AddRecipeWorker {
 
         logger.info("Processing task with title: {}, description: {}", title, description);
 
+        try {
         Mono<FilePart> logoFileMono = extractFilePart(externalTask);
-
         List<IngredientsRequest> ingredients = parseIngredients(ingredientsString);
-
         AddRecipeRequest addRecipeRequest = new AddRecipeRequest(title, description, ingredients);
-
         Mono<Person> requestOwnerMono = getPersonFromContext(externalTask);
 
-        recipeService.addRecipe(requestOwnerMono, addRecipeRequest, logoFileMono)
+            recipeService.addRecipe(requestOwnerMono, addRecipeRequest, logoFileMono)
                 .doOnSuccess(addRecipeResponse -> {
                     logger.info("Recipe added successfully: {}", addRecipeResponse);
                     handleSuccess(addRecipeResponse, externalTask, externalTaskService);
@@ -66,6 +69,11 @@ public class AddRecipeWorker {
                     handleError(throwable, externalTask, externalTaskService);
                 })
                 .subscribe();
+        } catch (Exception e) {
+            logger.error("Error while adding recipe: {}", e.getMessage(), e);
+            handleError(e, externalTask, externalTaskService);
+        }
+
     }
 
     private Mono<FilePart> extractFilePart(ExternalTask externalTask) {
@@ -109,7 +117,12 @@ public class AddRecipeWorker {
     }
 
     private Mono<Person> getPersonFromContext(ExternalTask externalTask) {
-        return personService.getPersonByEmail(externalTask.getVariable("email_field"));
+        String userId = externalTask.getVariable("initiator");
+
+        return assigneeService
+                .getUserByUserId(userId)
+                .map(CamundaUserProfileResponse::email)
+                .flatMap(personService::getPersonByEmail);
     }
     private void handleSuccess(AddRecipeResponse response, ExternalTask externalTask, ExternalTaskService externalTaskService) {
         Map<String, Object> variables = new HashMap<>();
@@ -119,7 +132,12 @@ public class AddRecipeWorker {
     }
 
     private void handleError(Throwable throwable, ExternalTask externalTask, ExternalTaskService externalTaskService) {
-        externalTaskService.handleFailure(externalTask, throwable.getMessage(), "Error while adding recipe", 0, 1000);
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("errorCode", "BP_ERROR");
+        variables.put("errorMessage", throwable.getMessage());
+
+        externalTaskService.handleBpmnError(externalTask, "BP_ERROR", throwable.getMessage(), variables);
+        logger.error("Form data error: {}", throwable.getMessage(), throwable);
     }
 
     private static List<IngredientsRequest> parseIngredients(String ingredientsString) {

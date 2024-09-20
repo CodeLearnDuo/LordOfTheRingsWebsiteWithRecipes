@@ -2,13 +2,17 @@ package blps.duo.project.workers;
 
 import blps.duo.project.dto.requests.SingUpRequest;
 import blps.duo.project.services.PersonService;
+import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.client.ExternalTaskClient;
+import org.camunda.bpm.client.task.ExternalTask;
+import org.camunda.bpm.client.task.ExternalTaskService;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
 
 @Component
+@Slf4j
 public class UserRegistrationWorker {
 
     private final ExternalTaskClient client;
@@ -21,7 +25,6 @@ public class UserRegistrationWorker {
     }
 
     private void subscribeToTask() {
-        System.out.println("subscribeToTask!!!!!!!!");
         client.subscribe("user-registration")
                 .handler((externalTask, externalTaskService) -> {
                     String email = externalTask.getVariable("email_field");
@@ -39,13 +42,18 @@ public class UserRegistrationWorker {
                                 externalTaskService.complete(externalTask, variables);
                             })
                             .doOnError(error -> {
-                                Map<String, Object> variables = new HashMap<>();
-                                variables.put("signinStatus", "error");
-                                variables.put("errorMessage", error.getMessage());
-                                externalTaskService.complete(externalTask, variables);
+                                handleError(error, externalTask, externalTaskService);
                             })
                             .subscribe();
                 })
                 .open();
+    }
+
+    private void handleError(Throwable throwable, ExternalTask externalTask, ExternalTaskService externalTaskService) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("errorCode", "BP_ERROR");
+        variables.put("errorMessage", throwable.getMessage());
+        externalTaskService.handleBpmnError(externalTask, "BP_ERROR", throwable.getMessage(), variables);
+        log.error("Form data error: {}", throwable.getMessage(), throwable);
     }
 }

@@ -1,6 +1,6 @@
-package blps.duo.project.services;
+package blps.duo.services;
 
-import blps.duo.project.dto.responses.CamundaUserProfileResponse;
+import blps.duo.dto.CamundaUserProfileResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
