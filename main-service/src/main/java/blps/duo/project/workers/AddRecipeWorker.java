@@ -12,7 +12,6 @@ import blps.duo.project.util.CustomFilePart;
 import org.camunda.bpm.client.ExternalTaskClient;
 import org.camunda.bpm.client.task.ExternalTask;
 import org.camunda.bpm.client.task.ExternalTaskService;
-import org.camunda.bpm.engine.variable.value.FileValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.codec.multipart.FilePart;
@@ -20,11 +19,8 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 import java.io.ByteArrayInputStream;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+
 @Component
 public class AddRecipeWorker {
     private final RecipeService recipeService;
@@ -41,11 +37,13 @@ public class AddRecipeWorker {
         this.client = client;
         subscribeToTask();
     }
+
     private void subscribeToTask() {
         client.subscribe("add-recipe-task")
                 .handler(this::handleTask)
                 .open();
     }
+
     private void handleTask(ExternalTask externalTask, ExternalTaskService externalTaskService) {
         String title = externalTask.getVariable("title_field");
         String description = externalTask.getVariable("description_field");
@@ -54,21 +52,21 @@ public class AddRecipeWorker {
         logger.info("Processing task with title: {}, description: {}", title, description);
 
         try {
-        Mono<FilePart> logoFileMono = extractFilePart(externalTask);
-        List<IngredientsRequest> ingredients = parseIngredients(ingredientsString);
-        AddRecipeRequest addRecipeRequest = new AddRecipeRequest(title, description, ingredients);
-        Mono<Person> requestOwnerMono = getPersonFromContext(externalTask);
+            Mono<FilePart> logoFileMono = extractFilePart(externalTask);
+            List<IngredientsRequest> ingredients = parseIngredients(ingredientsString);
+            AddRecipeRequest addRecipeRequest = new AddRecipeRequest(title, description, ingredients);
+            Mono<Person> requestOwnerMono = getPersonFromContext(externalTask);
 
             recipeService.addRecipe(requestOwnerMono, addRecipeRequest, logoFileMono)
-                .doOnSuccess(addRecipeResponse -> {
-                    logger.info("Recipe added successfully: {}", addRecipeResponse);
-                    handleSuccess(addRecipeResponse, externalTask, externalTaskService);
-                })
-                .doOnError(throwable -> {
-                    logger.error("Error while adding recipe: {}", throwable.getMessage(), throwable);
-                    handleError(throwable, externalTask, externalTaskService);
-                })
-                .subscribe();
+                    .doOnSuccess(addRecipeResponse -> {
+                        logger.info("Recipe added successfully: {}", addRecipeResponse);
+                        handleSuccess(addRecipeResponse, externalTask, externalTaskService);
+                    })
+                    .doOnError(throwable -> {
+                        logger.error("Error while adding recipe: {}", throwable.getMessage(), throwable);
+                        handleError(throwable, externalTask, externalTaskService);
+                    })
+                    .subscribe();
         } catch (Exception e) {
             logger.error("Error while adding recipe: {}", e.getMessage(), e);
             handleError(e, externalTask, externalTaskService);
@@ -85,13 +83,17 @@ public class AddRecipeWorker {
             logger.warn("File variable 'logo_field' is null.");
         }
 
-        if (fileVariable instanceof FileValue) {
-            FileValue fileValue = (FileValue) fileVariable;
-            return convertFileValueToMono(fileValue);
+        if (fileVariable instanceof ByteArrayInputStream) {
+            ByteArrayInputStream fileInputStream = (ByteArrayInputStream) fileVariable;
+            String fileName = UUID.randomUUID() + "uploaded-file.jpg";
+            String mimeType = "image/jpeg";
+
+            logger.info("File received as ByteArrayInputStream with size: {}", fileInputStream.available());
+            return Mono.just(new CustomFilePart(fileName, fileInputStream, mimeType));
         } else if (fileVariable instanceof byte[]) {
             byte[] fileBytes = (byte[]) fileVariable;
-            InputStream fileInputStream = new ByteArrayInputStream(fileBytes);
-            String fileName = "uploaded-file.jpg";
+            ByteArrayInputStream fileInputStream = new ByteArrayInputStream(fileBytes);
+            String fileName = UUID.randomUUID() + "uploaded-file.jpg";
             String mimeType = "image/jpeg";
 
             logger.info("File received as byte array, size: {} bytes", fileBytes.length);
@@ -102,19 +104,6 @@ public class AddRecipeWorker {
         return Mono.empty();
     }
 
-    private Mono<FilePart> convertFileValueToMono(FileValue fileValue) {
-        if (fileValue != null && fileValue.getValue() != null) {
-            InputStream fileInputStream = fileValue.getValue();
-            String fileName = fileValue.getFilename();
-            String mimeType = fileValue.getMimeType();
-
-            logger.info("File received: {}, MimeType: {}", fileName, mimeType);
-
-            return Mono.just(new CustomFilePart(fileName, fileInputStream, mimeType));
-        }
-        logger.warn("No file received");
-        return Mono.empty();
-    }
 
     private Mono<Person> getPersonFromContext(ExternalTask externalTask) {
         String userId = externalTask.getVariable("initiator");
@@ -124,6 +113,7 @@ public class AddRecipeWorker {
                 .map(CamundaUserProfileResponse::email)
                 .flatMap(personService::getPersonByEmail);
     }
+
     private void handleSuccess(AddRecipeResponse response, ExternalTask externalTask, ExternalTaskService externalTaskService) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("response", response);
