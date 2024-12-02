@@ -1,11 +1,11 @@
 version: '3'
 services:
-  redis:
-    image: redis
-    ports:
-      - "6379:6379"
-    container_name: my-redis
-    restart: always
+#  redis:
+#    image: redis
+#    ports:
+#      - "6379:6379"
+#    container_name: my-redis
+#    restart: always
 
   minio:
     image: quay.io/minio/minio
@@ -23,6 +23,8 @@ services:
   postgres:
     image: postgres:latest
     container_name: my-postgres
+    networks:
+      - backend
     environment:
       POSTGRES_DB: statistics
       POSTGRES_USER: stats_user
@@ -68,6 +70,24 @@ services:
       KAFKA_JMX_HOSTNAME: kafka
     volumes:
       - kafka_data:/var/lib/kafka/data
+    networks:
+      - backend
+
+  camunda:
+    image: camunda/camunda-bpm-platform:run-latest
+    container_name: my-camunda
+    ports:
+      - "8080:8080"
+    environment:
+      - CAMUNDA_REST_ENABLED=true
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://my-postgres:5432/statistics
+      - SPRING_DATASOURCE_USERNAME=stats_user
+      - SPRING_DATASOURCE_PASSWORD=stats_password
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver
+      - CAMUNDA_BPM_DATABASE_TYPE=postgres
+    depends_on:
+      - postgres
+    restart: always
     networks:
       - backend
 

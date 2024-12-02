@@ -31,7 +31,7 @@ public class EmailJob implements Job {
     public void sendEmails() {
         tmpLeaderService.getLeaders()
                 .map(leader -> {
-                    System.out.println(leader);
+                    log.info(String.valueOf(leader));
                     return leader;
                 })
                 .switchIfEmpty(Flux.defer(() -> {
@@ -41,13 +41,15 @@ public class EmailJob implements Job {
                         reportService.getSmallReportByRaceIdAndOffset(leader.getRaceId(), ONE_MONTH)
                                 .map(report -> createEmailMessage(leader.getEmail(), report))
                 )
-                .doOnNext(mailSender::send)
+                //TMP:sout change on mailSender::send to send emails
+                .doOnNext(System.out::println)
                 .doOnComplete(() -> log.info("Все письма успешно отправлены."))
                 .doOnError(error -> log.error("Произошла ошибка при отправке писем: ", error))
                 .subscribe();
     }
 
     private SimpleMailMessage createEmailMessage(String recipientEmail, String reportText) {
+        log.info("Создано письмо для: {}", recipientEmail);
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(recipientEmail);
         message.setSubject("Ежемесячная статистика");

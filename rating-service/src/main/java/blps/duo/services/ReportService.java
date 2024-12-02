@@ -1,6 +1,7 @@
 package blps.duo.services;
 
 import blps.duo.model.ExpandedStatistic;
+import blps.duo.model.Leader;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -13,6 +14,14 @@ import java.util.Comparator;
 public class ReportService {
 
     private final StatisticService statisticService;
+    private final TmpLeaderService tmpLeaderService;
+
+    public Mono<String> getSmallReportByLeaderEmailAndOffset(String email, Long offset) {
+        return tmpLeaderService
+                .getLeaderByEmail(email)
+                .map(Leader::getRaceId)
+                .flatMap(raceId -> getSmallReportByRaceIdAndOffset(raceId, offset));
+    }
 
     public Mono<String> getSmallReportByRaceIdAndOffset(Long raceId, Long offset) {
 

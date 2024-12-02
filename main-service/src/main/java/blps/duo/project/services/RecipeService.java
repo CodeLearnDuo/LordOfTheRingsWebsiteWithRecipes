@@ -21,6 +21,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
@@ -34,6 +36,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.sql.Timestamp;
 import java.util.Collections;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 @Service
@@ -54,6 +57,9 @@ public class RecipeService {
     private final KafkaSender<String, String> kafkaSender;
     private final ObjectMapper objectMapper;
 
+    private static final Logger logger = LoggerFactory.getLogger(RecipeService.class);
+
+
     public Mono<RecipeResponse> getRecipeResponseById(Long recipeId) {
         return recipeRepository
                 .findById(recipeId)
@@ -63,112 +69,142 @@ public class RecipeService {
                                 .flatMap(raceResponse ->
                                         ingredientService.getAllRecipesIngredients(recipeId)
                                                 .collectList()
-                                                .flatMap(ingredients ->
-                                                        minioService.downloadFile(extractFileNameFromUrl(recipe.getLogoUrl()))
-                                                                .collectList()
-                                                                .defaultIfEmpty(Collections.emptyList())
-                                                                .map(dataList -> {
-                                                                    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                                                                    dataList.forEach(buffer -> {
-                                                                        byte[] bytes = new byte[buffer.remaining()];
-                                                                        buffer.get(bytes);
-                                                                        try {
-                                                                            outputStream.write(bytes);
-                                                                        } catch (IOException e) {
-                                                                            throw new RuntimeException(e);
-                                                                        }
-                                                                    });
-                                                                    return new RecipeResponse(
-                                                                            recipe.getId(),
-                                                                            recipe.getTitle(),
-                                                                            recipe.getDescription(),
-                                                                            outputStream.toByteArray(),
-                                                                            new RaceResponse(raceResponse.getName()),
-                                                                            ingredients,
-                                                                            recipe.getRank()
-                                                                    );
-                                                                })
-                                                )
-                                )
-                );
-    }
+                                                .flatMap(ingredients -> {
+                                                    String logoUrl = Objects.equals(recipe.getLogoUrl(), "default-recipe-logo.jpeg") ? "default-recipe-logo.jpeg" : extractFileNameFromUrl(recipe.getLogoUrl());
 
-    public Flux<ShortRecipeResponse> getAllShortRecipes() {
-        return recipeRepository.findAll()
-                .flatMap(recipe ->
-                        raceService.getRaceById(recipe.getRaceId())
-                                .flatMap(raceResponse ->
-                                        minioService.downloadFile(extractFileNameFromUrl(recipe.getLogoUrl()))
-                                                .collectList()
-                                                .defaultIfEmpty(Collections.emptyList())
-                                                .map(dataList -> {
-                                                    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                                                    dataList.forEach(buffer -> {
-                                                        byte[] bytes = new byte[buffer.remaining()];
-                                                        buffer.get(bytes);
-                                                        try {
-                                                            outputStream.write(bytes);
-                                                        } catch (IOException e) {
-                                                            throw new RuntimeException(e);
-                                                        }
-                                                    });
-                                                    return new ShortRecipeResponse(
-                                                            recipe.getId(),
-                                                            recipe.getTitle(),
-                                                            outputStream.toByteArray(),
-                                                            new RaceResponse(raceResponse.getName()),
-                                                            recipe.getRank()
-                                                    );
+                                                    return minioService.downloadFileOrDefault(logoUrl)
+                                                            .collectList()
+                                                            .defaultIfEmpty(Collections.emptyList())
+                                                            .map(dataList -> {
+                                                                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                                                                dataList.forEach(buffer -> {
+                                                                    byte[] bytes = new byte[buffer.remaining()];
+                                                                    buffer.get(bytes);
+                                                                    try {
+                                                                        outputStream.write(bytes);
+                                                                    } catch (IOException e) {
+                                                                        throw new RuntimeException(e);
+                                                                    }
+                                                                });
+                                                                return new RecipeResponse(
+                                                                        recipe.getId(),
+                                                                        recipe.getTitle(),
+                                                                        recipe.getDescription(),
+                                                                        outputStream.toByteArray(),
+                                                                        new RaceResponse(raceResponse.getName()),
+                                                                        ingredients,
+                                                                        recipe.getRank()
+                                                                );
+                                                            });
                                                 })
                                 )
                 );
     }
 
+
+    public Flux<ShortRecipeResponse> getAllShortRecipes() {
+        return recipeRepository.findAll()
+                .flatMap(recipe ->
+                        raceService.getRaceById(recipe.getRaceId())
+                                .flatMap(raceResponse -> {
+                                    String logoUrl = Objects.equals(recipe.getLogoUrl(), "default-recipe-logo.jpeg") ? "default-recipe-logo.jpeg" : extractFileNameFromUrl(recipe.getLogoUrl());
+
+                                    return minioService.downloadFileOrDefault(logoUrl)
+                                            .collectList()
+                                            .defaultIfEmpty(Collections.emptyList())
+                                            .map(dataList -> {
+                                                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                                                dataList.forEach(buffer -> {
+                                                    byte[] bytes = new byte[buffer.remaining()];
+                                                    buffer.get(bytes);
+                                                    try {
+                                                        outputStream.write(bytes);
+                                                    } catch (IOException e) {
+                                                        throw new RuntimeException(e);
+                                                    }
+                                                });
+                                                return new ShortRecipeResponse(
+                                                        recipe.getId(),
+                                                        recipe.getTitle(),
+                                                        outputStream.toByteArray(),
+                                                        new RaceResponse(raceResponse.getName()),
+                                                        recipe.getRank()
+                                                );
+                                            });
+                                })
+                );
+    }
+
+
     public Mono<AddRecipeResponse> addRecipe(Mono<Person> requestOwnerMono, AddRecipeRequest addRecipeRequest, Mono<FilePart> logoFileMono) {
         return requiresNewReadCommitedTransactionalOperator.transactional(
                 requestOwnerMono
                         .switchIfEmpty(Mono.error(new AuthorizationException("Unauthorized Access")))
-                        .flatMap(requestOwner -> {
-                            return raceService.existsRaceById(requestOwner.getPersonRaceId())
-                                    .filter(Boolean::booleanValue)
-                                    .switchIfEmpty(Mono.error(new JwtAuthenticationException("Invalid race in jwt")))
-                                    .then(logoFileMono)
-                                    .flatMap(logoFile -> {
-                                        return minioService.uploadLogo(logoFile)
-                                                .flatMap(logoId -> {
-                                                    Recipe newRecipe = new Recipe(
-                                                            addRecipeRequest.title(),
-                                                            addRecipeRequest.description(),
-                                                            logoId,
-                                                            requestOwner.getPersonRaceId()
-                                                    );
-                                                    return recipeRepository.save(newRecipe)
-                                                            .onErrorResume(e -> {
-                                                                try {
-                                                                    return minioService.deleteLogo(logoId).then(Mono.error(e));
-                                                                } catch (Throwable throwable) {
-                                                                    log.error("PANIC in minio rollback", throwable);
-                                                                    return Mono.error(throwable);
-                                                                }
-                                                            })
-                                                            .flatMap(recipe ->
-                                                                    ingredientService.saveAllIngredientsForRecipeId(recipe.getId(), addRecipeRequest.ingredients())
-                                                                            .onErrorResume(e -> minioService.deleteLogo(logoId).then(Mono.error(e)))
-                                                                            .collectList()
-                                                                            .map(ingredientsResponseList -> new AddRecipeResponse(
-                                                                                    recipe.getId(),
-                                                                                    recipe.getTitle(),
-                                                                                    recipe.getDescription(),
-                                                                                    logoId,
-                                                                                    new RaceResponse(requestOwner.getName()),
-                                                                                    ingredientsResponseList,
-                                                                                    recipe.getRank()
-                                                                            ))
-                                                            );
-                                                });
-                                    });
-                        })
+                        .flatMap(requestOwner -> raceService.existsRaceById(requestOwner.getPersonRaceId())
+                                .filter(Boolean::booleanValue)
+                                .switchIfEmpty(Mono.error(new JwtAuthenticationException("Invalid race in jwt")))
+                                .then(logoFileMono.hasElement())
+                                .flatMap(hasLogo -> {
+                                    if (!hasLogo) {
+                                        logger.info("No logo provided, using default logo.");
+                                        String defaultLogoUrl = "default-recipe-logo.jpeg";
+                                        Recipe newRecipe = new Recipe(
+                                                addRecipeRequest.title(),
+                                                addRecipeRequest.description(),
+                                                defaultLogoUrl,
+                                                requestOwner.getPersonRaceId()
+                                        );
+                                        return saveRecipe(newRecipe, addRecipeRequest, requestOwner);
+                                    } else {
+                                        return logoFileMono.flatMap(logoFile -> {
+                                            logger.info("Logo file detected, uploading to Minio.");
+                                            return minioService.uploadLogo(logoFile)
+                                                    .flatMap(logoId -> {
+                                                        logger.info("Logo uploaded with ID: {}", logoId);
+                                                        Recipe newRecipe = new Recipe(
+                                                                addRecipeRequest.title(),
+                                                                addRecipeRequest.description(),
+                                                                logoId,
+                                                                requestOwner.getPersonRaceId()
+                                                        );
+                                                        return saveRecipe(newRecipe, addRecipeRequest, requestOwner);
+                                                    });
+                                        });
+                                    }
+                                })
+                        )
         );
+    }
+
+
+    private Mono<AddRecipeResponse> saveRecipe(Recipe recipe, AddRecipeRequest addRecipeRequest, Person requestOwner) {
+        return recipeRepository.save(recipe)
+                .onErrorResume(e -> {
+                    if (recipe.getLogoUrl() != null) {
+                        return minioService.deleteLogo(recipe.getLogoUrl()).then(Mono.error(e));
+                    } else {
+                        return Mono.error(e);
+                    }
+                })
+                .flatMap(savedRecipe -> ingredientService.saveAllIngredientsForRecipeId(savedRecipe.getId(), addRecipeRequest.ingredients())
+                        .onErrorResume(e -> {
+                            if (recipe.getLogoUrl() != null) {
+                                return minioService.deleteLogo(recipe.getLogoUrl()).then(Mono.error(e));
+                            } else {
+                                return Mono.error(e);
+                            }
+                        })
+                        .collectList()
+                        .map(ingredientsResponseList -> new AddRecipeResponse(
+                                savedRecipe.getId(),
+                                savedRecipe.getTitle(),
+                                savedRecipe.getDescription(),
+                                savedRecipe.getLogoUrl(),
+                                new RaceResponse(requestOwner.getName()),
+                                ingredientsResponseList,
+                                savedRecipe.getRank()
+                        ))
+                );
     }
 
 
@@ -179,25 +215,27 @@ public class RecipeService {
                 .filter(recipe -> pattern.matcher(recipe.getTitle()).find())
                 .flatMap(recipe ->
                         raceService.getRaceById(recipe.getRaceId())
-                                .flatMap(race ->
-                                        minioService.downloadFile(extractFileNameFromUrl(recipe.getLogoUrl()))
-                                                .collectList()
-                                                .map(byteBuffers -> {
-                                                    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                                                    byteBuffers.forEach(buffer -> {
-                                                        while (buffer.hasRemaining()) {
-                                                            outputStream.write(buffer.get());
-                                                        }
-                                                    });
-                                                    return new ShortRecipeResponse(
-                                                            recipe.getId(),
-                                                            recipe.getTitle(),
-                                                            outputStream.toByteArray(),
-                                                            new RaceResponse(race.getName()),
-                                                            recipe.getRank()
-                                                    );
-                                                })
-                                )
+                                .flatMap(race -> {
+                                    String logoUrl = Objects.equals(recipe.getLogoUrl(), "default-recipe-logo.jpeg") ? "default-recipe-logo.jpeg" : extractFileNameFromUrl(recipe.getLogoUrl());
+
+                                    return minioService.downloadFileOrDefault(logoUrl)
+                                            .collectList()
+                                            .map(byteBuffers -> {
+                                                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                                                byteBuffers.forEach(buffer -> {
+                                                    while (buffer.hasRemaining()) {
+                                                        outputStream.write(buffer.get());
+                                                    }
+                                                });
+                                                return new ShortRecipeResponse(
+                                                        recipe.getId(),
+                                                        recipe.getTitle(),
+                                                        outputStream.toByteArray(),
+                                                        new RaceResponse(race.getName()),
+                                                        recipe.getRank()
+                                                );
+                                            });
+                                })
                 );
     }
 
